@@ -13,6 +13,15 @@ const {
   getDailySummary,
 } = require("../sheets");
 
+// Splendid API client — only loaded if credentials are configured
+let splendid = null;
+try {
+  const SplendidClient = require("../../splendid-automation/splendid-client");
+  splendid = new SplendidClient();
+} catch {
+  // Splendid credentials not set up yet — invoice action will prompt the owner
+}
+
 const claude = new Anthropic.Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const SYSTEM_PROMPT = `You are a command parser for Baro Studio, a Pakistani clothing brand.
@@ -39,7 +48,10 @@ Possible actions and their JSON shapes:
 6. check_order — look up a specific order
 {"action":"check_order","orderId":"BS-YYYY-NNN"}
 
-7. unknown — message doesn't match any known command
+7. create_invoice — create a Splendid invoice for an order
+{"action":"create_invoice","orderId":"BS-YYYY-NNN"}
+
+8. unknown — message doesn't match any known command
 {"action":"unknown"}
 
 Rules:
@@ -99,6 +111,9 @@ async function handleOwnerMessage(message) {
     case "check_order":
       return await handleCheckOrder(parsed.orderId);
 
+    case "create_invoice":
+      return await handleCreateInvoice(parsed.orderId);
+
     case "unknown":
     default:
       return (
@@ -106,6 +121,7 @@ async function handleOwnerMessage(message) {
         "• *New order:* \"New order: Sara, 0301-1234567, size M, white kurta, PKR 4500, DHA Karachi\"\n" +
         "• *Update status:* \"BS-2026-001 dispatched TCS TCS123456\"\n" +
         "• *Payment received:* \"Payment received BS-2026-001\"\n" +
+        "• *Invoice:* \"Invoice BS-2026-001\"\n" +
         "• *Summary:* \"Today's summary\"\n" +
         "• *Unpaid:* \"Show unpaid orders\"\n" +
         "• *Check order:* \"Status of BS-2026-001\""
@@ -192,6 +208,42 @@ async function handleUnpaid() {
     lines.push(`• *${o.orderId}* — ${o.customerName} — PKR ${o.totalAmount} — ${o.orderStatus}`);
   }
   return lines.join("\n");
+}
+
+async function handleCreateInvoice(orderId) {
+  if (!splendid) {
+    return "Splendid API not configured yet. Add SPLENDID_* credentials to the .env file.";
+  }
+
+  const result = await getOrderById(orderId);
+  if (!result) return `Order *${orderId}* not found.`;
+
+  const { order, sheetRow } = result;
+
+  if (order.invoiceNo) {
+    return `Invoice already exists for *${orderId}*: *${order.invoiceNo}*`;
+  }
+
+  try {
+    const customerId  = await splendid.findOrCreateCustomer(order);
+    const invoice     = await splendid.createInvoice(order, customerId);
+    const invoiceNo   = invoice.number || invoice.id?.toString() || orderId;
+
+    // Write invoice number back to sheet (columns U + V)
+    const { updateOrder } = require("../sheets");
+    await updateOrder(sheetRow, { invoiceNo, invoiceSent: "Yes" });
+
+    return (
+      `✅ Splendid invoice created!\n\n` +
+      `*Invoice:* ${invoiceNo}\n` +
+      `*Order:* ${orderId}\n` +
+      `*Customer:* ${order.customerName}\n` +
+      `*Amount:* PKR ${order.totalAmount}\n\n` +
+      `Open Splendid to send it via WhatsApp.`
+    );
+  } catch (err) {
+    return `Failed to create invoice: ${err.message}`;
+  }
 }
 
 async function handleCheckOrder(orderId) {
