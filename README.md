@@ -128,10 +128,69 @@ Use the **Inventory** tab to track stock:
 
 ---
 
+## Step 4 — WhatsApp Bot (Two-Way Automation)
+
+The bot runs on Baro Studio's existing WhatsApp number and handles both directions:
+
+**Owner → Bot** (you send commands, bot acts):
+
+| Message you send | What happens |
+|---|---|
+| `New order: Sara, 0300-0000000, size M, navy kurta, PKR 4500, DHA Karachi` | Row added to Orders sheet, Order ID returned |
+| `BS-2026-001 dispatched Leopards LEP78901` | Status updated, tracking saved, customer auto-notified |
+| `Payment received BS-2026-001` | Payment marked, customer auto-notified |
+| `Today's summary` | Order count + revenue for today |
+| `Show unpaid orders` | Lists all pending payments |
+| `Status of BS-2026-001` | Full order details |
+
+**Bot → Customer** (automatic, no action needed):
+- Payment confirmed → customer receives confirmation message
+- Order dispatched with tracking → customer receives tracking message
+- Customer sends order ID → receives live status
+- Customer asks about sizes/fabric/delivery → receives FAQ reply
+
+### Setup
+
+```bash
+cd whatsapp-bot
+npm install
+cp .env.example .env   # fill in your credentials
+node bot.js            # QR code appears — scan with Baro Studio WhatsApp
+```
+
+On first run, a QR code appears in the terminal. Scan it once with the Baro Studio WhatsApp. The session is saved — no QR needed on future restarts.
+
+**Required credentials** (all in `.env`):
+- `OWNER_PHONE` — your WhatsApp number in international format (e.g. `923001234567`)
+- `ANTHROPIC_API_KEY` — from console.anthropic.com
+- `GOOGLE_SHEET_ID` — from your Google Sheet URL
+- `GOOGLE_SERVICE_ACCOUNT_KEY` — path to your service account JSON file
+
+### Deploying to a VPS
+
+```bash
+# Install Node.js on your VPS (Ubuntu/Debian)
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Clone repo and install
+git clone <your-repo-url>
+cd Asim/whatsapp-bot
+npm install
+cp .env.example .env   # fill in credentials
+
+# Run persistently (keeps running after you close SSH)
+npm install -g pm2
+pm2 start bot.js --name baro-studio-bot
+pm2 save
+pm2 startup   # follow the printed command to auto-start on reboot
+```
+
+---
+
 ## Future Additions (Planned)
 
-- [ ] WhatsApp Business API bot to capture orders automatically
 - [ ] PDF invoice generator (no Splendid login needed)
-- [ ] Monthly financial summary auto-generated to WhatsApp
+- [ ] Monthly financial summary auto-sent to owner WhatsApp on the 1st
 - [ ] Shopify storefront with Splendid sync (eliminates DM orders entirely)
 - [ ] Instagram Shopping integration
