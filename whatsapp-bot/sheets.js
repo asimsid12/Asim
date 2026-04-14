@@ -5,8 +5,9 @@
 
 const { google } = require("googleapis");
 
-const SHEET_ID = process.env.GOOGLE_SHEET_ID;
-const ORDERS_TAB = "Orders";
+const SHEET_ID    = process.env.GOOGLE_SHEET_ID;
+const ORDERS_TAB   = "Orders";
+const PURCHASES_TAB = "Purchases";
 
 // 0-based column indices — must match setup-sheet.gs exactly
 const COL = {
@@ -72,6 +73,25 @@ async function getOrderByPhone(phone) {
   for (let i = rows.length - 1; i >= 0; i--) {
     const row = rows[i];
     if (normalisePhone(row[COL.whatsapp] || "") === normalised && row[COL.customerName]) {
+      return { order: rowToOrder(row), sheetRow: i + 2 };
+    }
+  }
+  return null;
+}
+
+// Returns the most recent unpaid order for a given phone number.
+// Used to match a payment screenshot from a customer to their open order.
+async function getUnpaidOrderByPhone(phone) {
+  const normalised = normalisePhone(phone);
+  const rows = await getAllRows();
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const row = rows[i];
+    if (
+      normalisePhone(row[COL.whatsapp] || "") === normalised &&
+      row[COL.customerName] &&
+      row[COL.paymentStatus] === "Pending" &&
+      row[COL.orderStatus] !== "Cancelled"
+    ) {
       return { order: rowToOrder(row), sheetRow: i + 2 };
     }
   }
@@ -169,6 +189,40 @@ async function updateOrder(sheetRow, fields) {
   });
 }
 
+// Appends an expense to the Purchases tab. Returns { expenseId }.
+async function appendExpense(data) {
+  const sheets = await getClient();
+
+  // Count existing rows for a simple ref ID
+  const existing = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range:         `${PURCHASES_TAB}!A2:A`,
+  });
+  const count    = (existing.data.values || []).filter((r) => r[0]).length;
+  const expenseId = `EXP-${new Date().getFullYear()}-${String(count + 1).padStart(3, "0")}`;
+  const today     = new Date().toLocaleDateString("en-GB");
+
+  const row = [
+    expenseId,
+    today,
+    data.description || "",
+    data.vendor      || "",
+    parseFloat(data.amount) || 0,
+    data.category    || "Other",
+    data.paymentMethod || "",
+    data.notes       || "",
+  ];
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId:   SHEET_ID,
+    range:           `${PURCHASES_TAB}!A2`,
+    valueInputOption: "USER_ENTERED",
+    requestBody:     { values: [row] },
+  });
+
+  return { expenseId };
+}
+
 // Fetch rows where a notification needs to be sent (for poller.js)
 async function getDispatchedUnnotified() {
   const rows = await getAllRows();
@@ -237,10 +291,12 @@ function normalisePhone(phone) {
 module.exports = {
   getOrderById,
   getOrderByPhone,
+  getUnpaidOrderByPhone,
   getPendingPaymentOrders,
   getDailySummary,
   appendOrder,
   updateOrder,
+  appendExpense,
   getDispatchedUnnotified,
   getConfirmedUnnotified,
   normalisePhone,

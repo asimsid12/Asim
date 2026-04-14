@@ -1,7 +1,7 @@
 {
   "name": "baro-studio-whatsapp-bot",
-  "version": "1.0.0",
-  "description": "Two-way WhatsApp bot for Baro Studio — owner commands + customer auto-replies",
+  "version": "2.0.0",
+  "description": "WhatsApp bot for Baro Studio — voice commands, auto-invoicing, payment tracking",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
@@ -11,6 +11,8 @@
     "@whiskeysockets/baileys": "^6.7.0",
     "dotenv": "^16.0.0",
     "googleapis": "^126.0.0",
+    "openai": "^4.0.0",
+    "pdfkit": "^0.15.0",
     "pino": "^8.0.0",
     "qrcode-terminal": "^0.12.0"
   }

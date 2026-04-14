@@ -1,31 +1,28 @@
 /**
  * Routes incoming WhatsApp messages to the correct handler
  * based on whether the sender is the owner or a customer.
+ *
+ * Both handlers receive:
+ *   message - normalised message object from bot.js
+ *   send    - async (jid, payload) => void
  */
 
-const { handleOwnerMessage } = require("./handlers/owner");
+const { handleOwnerMessage }    = require("./handlers/owner");
 const { handleCustomerMessage } = require("./handlers/customer");
-const { normalisePhone } = require("./sheets");
+const { normalisePhone }        = require("./sheets");
 
-const OWNER_PHONE = normalisePhone(process.env.OWNER_PHONE || "");
+const OWNER_JID = `${normalisePhone(process.env.OWNER_PHONE || "")}@s.whatsapp.net`;
 
 function isOwner(jid) {
-  // Baileys JIDs look like: 923001234567@s.whatsapp.net
-  const phone = jid.split("@")[0];
-  return phone === OWNER_PHONE;
+  return jid === OWNER_JID;
 }
 
-async function routeMessage(message) {
-  const from = message.from;
-  const text = message.text;
-
-  if (!text || !text.trim()) return null; // ignore empty/media-only messages
-
-  if (isOwner(from)) {
-    return await handleOwnerMessage(message);
+async function routeMessage(message, send) {
+  if (isOwner(message.from)) {
+    await handleOwnerMessage(message, send);
   } else {
-    return await handleCustomerMessage(message);
+    await handleCustomerMessage(message, send);
   }
 }
 
-module.exports = { routeMessage };
+module.exports = { routeMessage, OWNER_JID };

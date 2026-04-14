@@ -1,0 +1,12 @@
+{
+  "name": "baro-studio",
+  "version": "2.0.0",
+  "description": "Baro Studio business automation — WhatsApp bot + Splendid Accounts integration",
+  "private": true,
+  "scripts": {
+    "start": "cd whatsapp-bot && node bot.js",
+    "install:bot": "cd whatsapp-bot && npm install",
+    "install:splendid": "cd splendid-automation && npm install",
+    "install:all": "npm run install:bot && npm run install:splendid"
+  }
+}

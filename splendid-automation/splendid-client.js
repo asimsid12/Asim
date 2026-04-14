@@ -190,6 +190,57 @@ class SplendidClient {
     });
   }
 
+  // ── Journal entries (expenses) ───────────────────────────────────────────
+
+  /**
+   * Record a business expense as a journal entry.
+   * Debits the expense GL account and credits the bank/cash account.
+   *
+   * Requires SPLENDID_EXPENSE_ACCOUNT_ID (debit) and
+   * SPLENDID_BANK_ACCOUNT_ID (credit) in .env.
+   *
+   * @param {object} data - expense data from owner.js handleNewExpense()
+   */
+  async recordJournalEntry(data) {
+    const expenseAccountId = parseInt(process.env.SPLENDID_EXPENSE_ACCOUNT_ID);
+    const bankAccountId    = parseInt(process.env.SPLENDID_BANK_ACCOUNT_ID);
+
+    if (!expenseAccountId || !bankAccountId) {
+      throw new Error("SPLENDID_EXPENSE_ACCOUNT_ID or SPLENDID_BANK_ACCOUNT_ID not set.");
+    }
+
+    const amount      = parseFloat(data.amount) || 0;
+    const today       = new Date().toISOString();
+    const description = [
+      data.description,
+      data.vendor ? `(${data.vendor})` : null,
+      data.category,
+    ].filter(Boolean).join(" ");
+
+    return this.post(`/${this.tenant}/${this.branchId}/JournalEntries/SaveAndApprove`, {
+      date:         today,
+      currencyId:   this.currencyId,
+      exchangeRate: 1,
+      reference:    description.slice(0, 100),
+      journalEntryDetails: [
+        {
+          // Debit the expense account (cost goes up)
+          accountId:  expenseAccountId,
+          debit:      amount,
+          credit:     0,
+          description,
+        },
+        {
+          // Credit the bank/cash account (money goes out)
+          accountId:  bankAccountId,
+          debit:      0,
+          credit:     amount,
+          description,
+        },
+      ],
+    });
+  }
+
   // ── Payments ─────────────────────────────────────────────────────────────
 
   /**

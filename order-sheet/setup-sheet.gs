@@ -216,7 +216,49 @@ function setupBaroStudioSheet() {
     SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo("Wholesale").setBackground("#cce5ff").setFontColor("#004085").setRanges([tagRange]).build(),
   ]);
 
-  // ── 4. DASHBOARD SHEET ──────────────────────────────────────────────────────
+  // ── 4. PURCHASES SHEET ──────────────────────────────────────────────────────
+  let purchasesSheet = ss.getSheetByName("Purchases");
+  if (!purchasesSheet) purchasesSheet = ss.insertSheet("Purchases");
+  purchasesSheet.clearContents();
+  purchasesSheet.clearFormats();
+
+  const purchaseHeaders = [
+    "Expense ID",         // A — e.g. EXP-2026-001
+    "Date",               // B
+    "Description",        // C — what was bought
+    "Vendor / Supplier",  // D
+    "Amount (PKR)",       // E
+    "Category",           // F
+    "Payment Method",     // G
+    "Notes"               // H
+  ];
+
+  purchasesSheet.getRange(1, 1, 1, purchaseHeaders.length).setValues([purchaseHeaders]);
+  purchasesSheet.getRange(1, 1, 1, purchaseHeaders.length)
+    .setBackground("#1a1a1a")
+    .setFontColor("#ffffff")
+    .setFontWeight("bold")
+    .setFontSize(10);
+  purchasesSheet.setFrozenRows(1);
+
+  const purchaseColWidths = [110, 90, 220, 160, 120, 120, 130, 200];
+  purchaseColWidths.forEach((w, i) => purchasesSheet.setColumnWidth(i + 1, w));
+
+  setDropdown(purchasesSheet, 2, 6, 500, ["Fabric", "Tailoring", "Packaging", "Marketing", "Other"]);
+  setDropdown(purchasesSheet, 2, 7, 500, ["JazzCash", "Easypaisa", "Bank Transfer", "Cash"]);
+
+  // Highlight large expenses (≥ PKR 10,000)
+  const amtRange = purchasesSheet.getRange("E2:E501");
+  purchasesSheet.setConditionalFormatRules([
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenNumberGreaterThanOrEqualTo(10000)
+      .setBackground("#fff3cd")
+      .setFontColor("#856404")
+      .setRanges([amtRange])
+      .build()
+  ]);
+
+  // ── 5. DASHBOARD SHEET ──────────────────────────────────────────────────────
   let dashSheet = ss.getSheetByName("Dashboard");
   if (!dashSheet) dashSheet = ss.insertSheet("Dashboard", 0); // Put first
   dashSheet.clearContents();
@@ -237,6 +279,11 @@ function setupBaroStudioSheet() {
       ""],
     ["THIS MONTH ORDERS",
       `=SUMPRODUCT((MONTH(Orders!B2:B5000)=MONTH(TODAY()))*(YEAR(Orders!B2:B5000)=YEAR(TODAY()))*(Orders!D2:D5000<>""))`,
+      ""],
+    ["", "", ""],
+    ["TOTAL EXPENSES (PKR)",    `=SUM(Purchases!E2:E5000)`, ""],
+    ["THIS MONTH EXPENSES (PKR)",
+      `=SUMPRODUCT((MONTH(Purchases!B2:B5000)=MONTH(TODAY()))*(YEAR(Purchases!B2:B5000)=YEAR(TODAY()))*Purchases!E2:E5000)`,
       ""],
   ];
 
@@ -261,6 +308,7 @@ function setupBaroStudioSheet() {
     "Sheets created:\n" +
     "• Dashboard — live summary stats\n" +
     "• Orders — full order tracking\n" +
+    "• Purchases — fabric, tailoring & other expenses\n" +
     "• Inventory — stock levels & alerts\n" +
     "• Customers — customer database\n\n" +
     "Start adding orders to the Orders sheet."
