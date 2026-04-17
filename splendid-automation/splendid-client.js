@@ -150,12 +150,7 @@ class SplendidClient {
     const unitPrice = parseFloat(order.unitPrice)   || 0;
     const gross     = qty * unitPrice;
 
-    // Try to find the product in Splendid's catalog; fall back to default
-    let productId = this.defaultProductId;
-    if (order.itemName) {
-      const product = await this.findProductByName(order.itemName);
-      if (product) productId = product.id;
-    }
+    const productId = this.defaultProductId;
 
     const today   = new Date().toISOString().split("T")[0];
     const dueDate = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
