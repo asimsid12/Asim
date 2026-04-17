@@ -1,4 +1,15 @@
-require("dotenv").config({ path: require("path").join(__dirname, "whatsapp-bot", ".env") });
+const fs   = require("fs");
+const path = require("path");
+const envFile = path.join(__dirname, "whatsapp-bot", ".env");
+fs.readFileSync(envFile, "utf8").split("\n").forEach(line => {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith("#")) return;
+  const eq = trimmed.indexOf("=");
+  if (eq === -1) return;
+  const k = trimmed.slice(0, eq).trim();
+  const v = trimmed.slice(eq + 1).trim();
+  if (k) process.env[k] = v;
+});
 
 const key    = process.env.SPLENDID_API_KEY;
 const secret = process.env.SPLENDID_API_SECRET;
