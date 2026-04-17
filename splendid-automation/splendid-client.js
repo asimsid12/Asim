@@ -224,17 +224,17 @@ class SplendidClient {
       reference:    description.slice(0, 100),
       journalEntryDetails: [
         {
-          // Debit the expense account (cost goes up)
-          accountId:  expenseAccountId,
-          debit:      amount,
-          credit:     0,
+          accountId:   expenseAccountId,
+          contactId:   0,
+          debit:       amount,
+          credit:      0,
           description,
         },
         {
-          // Credit the bank/cash account (money goes out)
-          accountId:  bankAccountId,
-          debit:      0,
-          credit:     amount,
+          accountId:   bankAccountId,
+          contactId:   0,
+          debit:       0,
+          credit:      amount,
           description,
         },
       ],
