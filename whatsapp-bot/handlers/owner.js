@@ -25,7 +25,10 @@ const {
 
 const { transcribeAudio }    = require("../lib/whisper");
 const { generateInvoicePdf } = require("../lib/pdf-invoice");
-const { getPendingPayment, clearPendingPayment } = require("../state");
+const {
+  getPendingPayment, clearPendingPayment,
+  setPendingInvoice, getPendingInvoice, clearPendingInvoice,
+} = require("../state");
 
 // Splendid client — optional; order logging still works without it
 let splendid = null;
@@ -100,8 +103,15 @@ async function parseCommand(text) {
 async function handleOwnerMessage(message, send) {
   const reply = (text) => send(message.from, text);
 
-  // ── 1. Pending payment confirmation? ──────────────────────────────────────
-  // If a customer screenshot is waiting for owner confirmation
+  // ── 1a. Pending invoice send? ─────────────────────────────────────────────
+  const pendingInvoice = getPendingInvoice();
+  if (pendingInvoice && isConfirmation(message.text)) {
+    await sendInvoiceToCustomer(pendingInvoice, send, message.from);
+    clearPendingInvoice();
+    return;
+  }
+
+  // ── 1b. Pending payment confirmation? ────────────────────────────────────
   const pending = getPendingPayment();
   if (pending && isConfirmation(message.text)) {
     await confirmPayment(pending, send, message.from);
@@ -222,30 +232,7 @@ async function handleNewOrder(data, send, ownerJid) {
     console.error("PDF generation error:", err.message);
   }
 
-  // 4. Send PDF to customer (if they have a WhatsApp number)
-  let invoiceSentToCustomer = false;
-  if (pdfBuffer && data.whatsapp) {
-    const customerJid = `${normalisePhone(data.whatsapp)}@s.whatsapp.net`;
-    try {
-      await send(customerJid, {
-        document: pdfBuffer,
-        mimetype: "application/pdf",
-        fileName: `Baro-Studio-${orderId}.pdf`,
-        caption:
-          `Hi ${data.customerName}! 🤍 Thank you for your order with Baro Studio.\n\n` +
-          `Please find your invoice attached. To confirm your order, kindly complete payment and send us the screenshot.\n\n` +
-          `Order ID: *${orderId}*`,
-      });
-      invoiceSentToCustomer = true;
-      // Mark invoice as sent in sheet
-      const result = await getOrderById(orderId);
-      if (result) await updateOrder(result.sheetRow, { invoiceSent: "Yes" });
-    } catch (err) {
-      console.error("Failed to send invoice to customer:", err.message);
-    }
-  }
-
-  // 5. Confirm back to owner
+  // 4. Send PDF to owner for review, store pending send
   const lines = [
     `✅ *Order logged!*`,
     ``,
@@ -255,14 +242,28 @@ async function handleNewOrder(data, send, ownerJid) {
     `*Amount:* PKR ${(total || 0).toLocaleString()}`,
     data.city ? `*City:* ${data.city}` : null,
     invoiceNo ? `*Splendid Invoice:* ${invoiceNo}` : null,
-    ``,
-    invoiceSentToCustomer
-      ? `📄 Invoice PDF sent to customer's WhatsApp.`
-      : data.whatsapp
-        ? `⚠️ Invoice generated but couldn't send to customer. Share manually.`
-        : `⚠️ No customer WhatsApp number — share invoice manually.`,
   ];
   await reply(lines.filter((l) => l !== null).join("\n"));
+
+  if (pdfBuffer) {
+    await send(ownerJid, {
+      document: pdfBuffer,
+      mimetype: "application/pdf",
+      fileName: `Baro-Studio-${orderId}.pdf`,
+      caption: data.whatsapp
+        ? `👆 Review the invoice above.\n\nReply *yes* to send it to ${data.customerName}.`
+        : `👆 Invoice preview. No customer WhatsApp number — share manually.`,
+    });
+    if (data.whatsapp) {
+      setPendingInvoice({
+        orderId,
+        customerJid: `${normalisePhone(data.whatsapp)}@s.whatsapp.net`,
+        customerName: data.customerName,
+        pdfBuffer,
+        sheetRow: (await getOrderById(orderId))?.sheetRow,
+      });
+    }
+  }
 }
 
 async function handleNewExpense(data, reply) {
@@ -302,6 +303,25 @@ async function handleNewExpense(data, reply) {
     invoiceRef ? `*Splendid Invoice:* ${invoiceRef}` : null,
   ];
   await reply(lines.filter((l) => l !== null).join("\n"));
+}
+
+async function sendInvoiceToCustomer(pending, send, ownerJid) {
+  const reply = (text) => send(ownerJid, text);
+  try {
+    await send(pending.customerJid, {
+      document: pending.pdfBuffer,
+      mimetype: "application/pdf",
+      fileName: `Baro-Studio-${pending.orderId}.pdf`,
+      caption:
+        `Hi ${pending.customerName}! 🤍 Thank you for your order with Baro Studio.\n\n` +
+        `Please find your invoice attached. To confirm your order, kindly complete payment and send us the screenshot.\n\n` +
+        `Order ID: *${pending.orderId}*`,
+    });
+    if (pending.sheetRow) await updateOrder(pending.sheetRow, { invoiceSent: "Yes" });
+    await reply(`📄 Invoice sent to ${pending.customerName}.`);
+  } catch (err) {
+    await reply(`Failed to send invoice: ${err.message}`);
+  }
 }
 
 async function handleUpdateStatus(parsed) {

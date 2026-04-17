@@ -8,29 +8,17 @@
  */
 
 let pendingPaymentConfirmation = null;
+let pendingInvoiceSend = null;
 
-/**
- * @typedef {object} PendingPayment
- * @property {string} orderId
- * @property {string} customerJid   - e.g. "923001234567@s.whatsapp.net"
- * @property {string} customerName
- * @property {number|string} amount
- * @property {number} sheetRow
- * @property {string} [invoiceId]   - Splendid invoice ID if known
- */
+function setPendingPayment(data)  { pendingPaymentConfirmation = data; }
+function getPendingPayment()      { return pendingPaymentConfirmation; }
+function clearPendingPayment()    { pendingPaymentConfirmation = null; }
 
-/** @param {PendingPayment} data */
-function setPendingPayment(data) {
-  pendingPaymentConfirmation = data;
-}
+function setPendingInvoice(data)  { pendingInvoiceSend = data; }
+function getPendingInvoice()      { return pendingInvoiceSend; }
+function clearPendingInvoice()    { pendingInvoiceSend = null; }
 
-/** @returns {PendingPayment|null} */
-function getPendingPayment() {
-  return pendingPaymentConfirmation;
-}
-
-function clearPendingPayment() {
-  pendingPaymentConfirmation = null;
-}
-
-module.exports = { setPendingPayment, getPendingPayment, clearPendingPayment };
+module.exports = {
+  setPendingPayment, getPendingPayment, clearPendingPayment,
+  setPendingInvoice, getPendingInvoice, clearPendingInvoice,
+};
