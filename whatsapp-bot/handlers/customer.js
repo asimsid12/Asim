@@ -75,12 +75,7 @@ async function handleCustomerMessage(message, send) {
     }
   }
 
-  // ── 3. Fallback ───────────────────────────────────────────────────────────
-  await send(
-    from,
-    "Hi! 🤍 Thanks for messaging Baro Studio.\n\n" +
-    "We'll get back to you shortly. To check your order status, send your Order ID (e.g. *BS-2026-001*)."
-  );
+  // Customer replies disabled — ignore all other messages for now
 }
 
 module.exports = { handleCustomerMessage };
