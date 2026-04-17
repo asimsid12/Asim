@@ -191,51 +191,87 @@ class SplendidClient {
     });
   }
 
-  // ── Journal entries (expenses) ───────────────────────────────────────────
+  // ── Suppliers ────────────────────────────────────────────────────────────
+
+  async findSupplierByName(name) {
+    try {
+      const results = await this.post(
+        `/${this.tenant}/${this.branchId}/Suppliers/Search`,
+        { name: { name, exactMatch: false } }
+      );
+      return Array.isArray(results) && results.length > 0 ? results[0] : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async createSupplier({ name }) {
+    return this.post(`/${this.tenant}/${this.branchId}/Suppliers`, {
+      name,
+      displayName:  name,
+      currencyId:   this.currencyId,
+      isActive:     true,
+    });
+  }
+
+  async findOrCreateSupplier(vendorName) {
+    const name = vendorName || "General Vendor";
+    const existing = await this.findSupplierByName(name);
+    if (existing) return existing.id;
+    const created = await this.createSupplier({ name });
+    return created.id;
+  }
+
+  // ── Purchase invoices (expenses) ─────────────────────────────────────────
+
+  // Maps expense category + vendor name to the correct GL account ID.
+  // Fabric → Inventory; Tailoring → vendor-specific account; etc.
+  expenseAccountId(category, vendor = "") {
+    const v = (vendor || "").toLowerCase();
+    switch ((category || "").toLowerCase()) {
+      case "fabric":       return 2701193;  // Inventory
+      case "tailoring":    return v.includes("ibrahim") ? 2705041 : 2705040;  // Ibrahim or Sunny
+      case "accessories":  return 2738462;  // Kaj, Zipper, Buttons Etc
+      case "embroidery":   return 2810811;  // Embroidery - Shahzaib
+      default:             return 2701198;  // Cost of Goods Sold
+    }
+  }
 
   /**
-   * Record a business expense as a journal entry.
-   * Debits the expense GL account and credits the bank/cash account.
-   *
-   * Requires SPLENDID_EXPENSE_ACCOUNT_ID (debit) and
-   * SPLENDID_BANK_ACCOUNT_ID (credit) in .env.
+   * Record a purchase expense as a Splendid Purchase Invoice.
+   * Fabric goes to Inventory; tailoring/embroidery/accessories to their
+   * respective Direct Cost accounts.
    *
    * @param {object} data - expense data from owner.js handleNewExpense()
    */
-  async recordJournalEntry(data) {
-    const expenseAccountId = parseInt(process.env.SPLENDID_EXPENSE_ACCOUNT_ID);
-    const bankAccountId    = parseInt(process.env.SPLENDID_BANK_ACCOUNT_ID);
+  async createPurchaseInvoice(data) {
+    const supplierId = await this.findOrCreateSupplier(data.vendor);
+    const amount     = parseFloat(data.amount) || 0;
+    const accountId  = this.expenseAccountId(data.category, data.vendor);
+    const today      = new Date().toISOString();
+    const dueDate    = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    if (!expenseAccountId || !bankAccountId) {
-      throw new Error("SPLENDID_EXPENSE_ACCOUNT_ID or SPLENDID_BANK_ACCOUNT_ID not set.");
-    }
-
-    const amount      = parseFloat(data.amount) || 0;
-    const today       = new Date().toISOString();
     const description = [
       data.description,
       data.vendor ? `(${data.vendor})` : null,
-      data.category,
     ].filter(Boolean).join(" ");
 
-    return this.post(`/${this.tenant}/${this.branchId}/JournalEntries/SaveAndApprove`, {
+    return this.post(`/${this.tenant}/${this.branchId}/PurchaseInvoices/SaveAndApprove`, {
+      supplierId,
       date:         today,
+      dueDate,
       currencyId:   this.currencyId,
       exchangeRate: 1,
+      grossAmount:  amount,
+      netAmount:    amount,
       reference:    description.slice(0, 100),
-      journalEntryDetails: [
+      purchaseInvoiceDetails: [
         {
-          accountId:   expenseAccountId,
-          contactId:   0,
-          debit:       amount,
-          credit:      0,
-          description,
-        },
-        {
-          accountId:   bankAccountId,
-          contactId:   0,
-          debit:       0,
-          credit:      amount,
+          accountId,
+          quantity:    1,
+          price:       amount,
+          grossAmount: amount,
+          netAmount:   amount,
           description,
         },
       ],

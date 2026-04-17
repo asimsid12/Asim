@@ -49,8 +49,8 @@ Possible actions:
 1. new_order — owner is logging a new customer order
 {"action":"new_order","data":{"customerName":"","whatsapp":"","city":"","address":"","itemName":"","size":"","colour":"","qty":1,"unitPrice":0,"paymentMethod":"","notes":""}}
 
-2. new_expense — owner is recording a purchase/expense (fabric, tailor, packaging, etc.)
-{"action":"new_expense","data":{"description":"","vendor":"","amount":0,"category":"Fabric|Tailoring|Packaging|Other","paymentMethod":"","notes":""}}
+2. new_expense — owner is recording a purchase/expense (fabric, tailor, accessories, embroidery, etc.)
+{"action":"new_expense","data":{"description":"","vendor":"","amount":0,"category":"Fabric|Tailoring|Accessories|Embroidery|Other","paymentMethod":"","notes":""}}
 
 3. update_status — change an order's status
 {"action":"update_status","orderId":"BS-YYYY-NNN","status":"Confirmed|In Production|Ready|Dispatched|Delivered|Cancelled","courier":"","trackingNo":""}
@@ -75,7 +75,8 @@ Rules:
 - Prices are in PKR. If not stated, use 0.
 - If order ID looks partial (e.g. "001"), expand to "BS-CURRENT_YEAR-001".
 - Courier mapping: tcs→TCS, leo/leopards→Leopards, blue/blueex→BlueEx, postex→PostEx, mp/m&p→M&P.
-- For expenses: category = one of Fabric, Tailoring, Packaging, Other.
+- For expenses: category = one of Fabric, Tailoring, Accessories, Embroidery, Other.
+- Tailoring vendor: use the actual name (Sunny, Ibrahim, etc.) so the right account is used.
 - Return ONLY the JSON object.`;
 
 async function parseCommand(text) {
@@ -278,14 +279,14 @@ async function handleNewExpense(data, reply) {
     return;
   }
 
-  // 2. Record journal entry in Splendid (if configured)
-  let journalRef = null;
+  // 2. Create purchase invoice in Splendid (if configured)
+  let invoiceRef = null;
   if (splendid) {
     try {
-      const entry  = await splendid.recordJournalEntry(data);
-      journalRef   = entry?.number || entry?.id?.toString() || null;
+      const invoice = await splendid.createPurchaseInvoice(data);
+      invoiceRef    = invoice?.number || invoice?.id?.toString() || null;
     } catch (err) {
-      console.error("Splendid journal entry error:", err.message);
+      console.error("Splendid purchase invoice error:", err.message);
     }
   }
 
@@ -297,7 +298,7 @@ async function handleNewExpense(data, reply) {
     data.vendor ? `*Vendor:* ${data.vendor}` : null,
     `*Amount:* PKR ${parseFloat(data.amount).toLocaleString()}`,
     `*Category:* ${data.category || "Other"}`,
-    journalRef ? `*Splendid Journal:* ${journalRef}` : null,
+    invoiceRef ? `*Splendid Invoice:* ${invoiceRef}` : null,
   ];
   await reply(lines.filter((l) => l !== null).join("\n"));
 }
