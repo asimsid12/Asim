@@ -1,4 +1,4 @@
-require("dotenv").config({ path: "./whatsapp-bot/.env" });
+require("dotenv").config({ path: require("path").join(__dirname, "whatsapp-bot", ".env") });
 
 const key    = process.env.SPLENDID_API_KEY;
 const secret = process.env.SPLENDID_API_SECRET;
