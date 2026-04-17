@@ -23,19 +23,19 @@ console.log("App ID :", appId || "(not set)");
 console.log("Key    :", key ? key.slice(0, 8) + "…" : "MISSING");
 console.log();
 
-const headers = {
-  "X-Api-Key":    key,
-  "X-Api-Secret": secret,
-  "Accept":       "application/json",
-};
-if (appId) headers["X-App-Id"] = appId;
-
-async function test(label, url, method = "GET", body) {
+async function test(label, url, method = "GET", body, extraHeaders = {}) {
+  const headers = {
+    "X-Api-Key":    key,
+    "X-Api-Secret": secret,
+    "Content-Type": "application/json",
+    "Accept":       "application/json",
+    ...extraHeaders,
+  };
   console.log(`Testing ${label} …`);
   try {
     const res = await fetch(url, {
       method,
-      headers: { ...headers, "Content-Type": "application/json" },
+      headers,
       body: body ? JSON.stringify(body) : undefined,
     });
     const text = await res.text();
@@ -49,21 +49,20 @@ async function test(label, url, method = "GET", body) {
 
 (async () => {
   const base = `https://app.splendidaccounts.com/api`;
+  const url  = `${base}/Companies`;
 
-  // 1. Simple GET — does auth work at all?
-  await test("GET /Companies", `${base}/Companies`);
+  console.log("--- No X-App-Id ---");
+  await test("GET /Companies", url);
 
-  // 2. GET customers list
-  await test(
-    `GET /${tenant}/${branch}/Customers`,
-    `${base}/${tenant}/${branch}/Customers?page=1&pageSize=1`
-  );
+  console.log("--- X-App-Id: 1 ---");
+  await test("GET /Companies", url, "GET", null, { "X-App-Id": "1" });
 
-  // 3. POST customer search
-  await test(
-    `POST /${tenant}/${branch}/Customers/Search`,
-    `${base}/${tenant}/${branch}/Customers/Search`,
-    "POST",
-    { name: { name: "test", exactMatch: false } }
-  );
+  console.log("--- X-App-Id: baro-studio ---");
+  await test("GET /Companies", url, "GET", null, { "X-App-Id": "baro-studio" });
+
+  console.log("--- X-App-Id: Baro Bot ---");
+  await test("GET /Companies", url, "GET", null, { "X-App-Id": "Baro Bot" });
+
+  console.log("--- X-App-Id: web ---");
+  await test("GET /Companies", url, "GET", null, { "X-App-Id": "web" });
 })();
