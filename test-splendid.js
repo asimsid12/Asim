@@ -48,21 +48,11 @@ async function test(label, url, method = "GET", body, extraHeaders = {}) {
 }
 
 (async () => {
-  const base = `https://app.splendidaccounts.com/api`;
-  const url  = `${base}/Companies`;
+  const base    = `https://app.splendidaccounts.com/api`;
+  const appId   = { "X-App-Id": "1" };
 
-  console.log("--- No X-App-Id ---");
-  await test("GET /Companies", url);
-
-  console.log("--- X-App-Id: 1 ---");
-  await test("GET /Companies", url, "GET", null, { "X-App-Id": "1" });
-
-  console.log("--- X-App-Id: baro-studio ---");
-  await test("GET /Companies", url, "GET", null, { "X-App-Id": "baro-studio" });
-
-  console.log("--- X-App-Id: Baro Bot ---");
-  await test("GET /Companies", url, "GET", null, { "X-App-Id": "Baro Bot" });
-
-  console.log("--- X-App-Id: web ---");
-  await test("GET /Companies", url, "GET", null, { "X-App-Id": "web" });
+  await test("GET /Companies",                    `${base}/Companies`,                                              "GET",  null, appId);
+  await test(`GET /${tenant}/warehouses`,          `${base}/${tenant}/warehouses`,                                   "GET",  null, appId);
+  await test(`GET /${tenant}/${branch}/Customers`, `${base}/${tenant}/${branch}/Customers?page=1&pageSize=1`,        "GET",  null, appId);
+  await test(`POST Customers/Search`,              `${base}/${tenant}/${branch}/Customers/Search`,                   "POST", { name: { name: "test", exactMatch: false } }, appId);
 })();
