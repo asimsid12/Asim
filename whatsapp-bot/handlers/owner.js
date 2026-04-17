@@ -88,7 +88,8 @@ async function parseCommand(text) {
     messages:   [{ role: "user", content: `Current year: ${year}\nOwner message: ${text}` }],
   });
   try {
-    return JSON.parse(res.content[0].text.trim());
+    const raw = res.content[0].text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+    return JSON.parse(raw);
   } catch {
     return { action: "unknown" };
   }
