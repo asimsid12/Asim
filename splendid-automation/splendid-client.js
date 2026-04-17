@@ -92,7 +92,7 @@ class SplendidClient {
     return this.post(`/${this.tenant}/${this.branchId}/Customers`, {
       name,
       displayName: name,
-      phone: { phone: phone || "" },
+      phone: phone || "",
       city:     city    || "",
       address1: address || "",
       currencyId: this.currencyId,
