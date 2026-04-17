@@ -157,8 +157,8 @@ class SplendidClient {
       if (product) productId = product.id;
     }
 
-    const today   = new Date().toISOString();
-    const dueDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // +7 days
+    const today   = new Date().toISOString().split("T")[0];
+    const dueDate = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
 
     const description = [
       order.itemName,
@@ -248,8 +248,8 @@ class SplendidClient {
     const supplierId = await this.findOrCreateSupplier(data.vendor);
     const amount     = parseFloat(data.amount) || 0;
     const accountId  = this.expenseAccountId(data.category, data.vendor);
-    const today      = new Date().toISOString();
-    const dueDate    = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const today      = new Date().toISOString().split("T")[0];
+    const dueDate    = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
 
     const description = [
       data.description,
