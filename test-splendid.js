@@ -13,13 +13,13 @@ fs.readFileSync(envFile, "utf8").split("\n").forEach(line => {
 
 const key    = process.env.SPLENDID_API_KEY;
 const secret = process.env.SPLENDID_API_SECRET;
-const appId  = process.env.SPLENDID_APP_ID;
+const appId0 = process.env.SPLENDID_APP_ID;
 const tenant = process.env.SPLENDID_TENANT;
 const branch = process.env.SPLENDID_BRANCH_ID;
 
 console.log("Tenant :", tenant);
 console.log("Branch :", branch);
-console.log("App ID :", appId || "(not set)");
+console.log("App ID :", appId0 || "(not set)");
 console.log("Key    :", key ? key.slice(0, 8) + "…" : "MISSING");
 console.log();
 
@@ -49,7 +49,7 @@ async function test(label, url, method = "GET", body, extraHeaders = {}) {
 
 (async () => {
   const base    = `https://app.splendidaccounts.com/api`;
-  const appId   = { "X-App-Id": "1" };
+  const appId   = appId0 ? { "X-App-Id": appId0 } : {};
 
   await test("GET /Companies",                    `${base}/Companies`,                                              "GET",  null, appId);
   await test(`GET /${tenant}/warehouses`,          `${base}/${tenant}/warehouses`,                                   "GET",  null, appId);
