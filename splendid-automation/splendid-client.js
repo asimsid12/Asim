@@ -17,7 +17,7 @@ class SplendidClient {
     this.currencyId      = parseInt(process.env.SPLENDID_CURRENCY_ID || "1"); // 1 = PKR
     this.defaultProductId = parseInt(process.env.SPLENDID_DEFAULT_PRODUCT_ID);
 
-    if (!this.apiKey || !this.apiSecret || !this.appId || !this.tenant || !this.branchId) {
+    if (!this.apiKey || !this.apiSecret || !this.tenant || !this.branchId) {
       throw new Error("Missing Splendid API credentials. Check SPLENDID_* env vars.");
     }
   }
@@ -25,13 +25,14 @@ class SplendidClient {
   // ── HTTP helpers ─────────────────────────────────────────────────────────
 
   headers() {
-    return {
+    const h = {
       "X-Api-Key":    this.apiKey,
       "X-Api-Secret": this.apiSecret,
-      "X-App-Id":     this.appId,
       "Content-Type": "application/json",
       "Accept":       "application/json",
     };
+    if (this.appId) h["X-App-Id"] = this.appId;
+    return h;
   }
 
   async get(path) {
