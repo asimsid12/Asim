@@ -11,10 +11,13 @@ const { handleOwnerMessage }    = require("./handlers/owner");
 const { handleCustomerMessage } = require("./handlers/customer");
 const { normalisePhone }        = require("./sheets");
 
-const OWNER_JID = `${normalisePhone(process.env.OWNER_PHONE || "")}@s.whatsapp.net`;
+const OWNER_PHONE = normalisePhone(process.env.OWNER_PHONE || "");
+const OWNER_JID   = `${OWNER_PHONE}@s.whatsapp.net`;
 
 function isOwner(jid) {
-  return jid === OWNER_JID;
+  return jid === OWNER_JID ||
+         jid === `${OWNER_PHONE}@lid` ||
+         jid.startsWith(`${OWNER_PHONE}:`);
 }
 
 async function routeMessage(message, send) {
