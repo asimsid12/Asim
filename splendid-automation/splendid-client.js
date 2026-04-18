@@ -141,29 +141,30 @@ class SplendidClient {
     if (!itemName) return this.defaultProductId;
     try {
       const res = await this.get(
-        `/${this.tenant}/${this.branchId}/Products/BySKUOrName?name=${encodeURIComponent(itemName)}`
+        `/${this.tenant}/${this.branchId}/Products?page=1&pageSize=200`
       );
       const list = Array.isArray(res) ? res : res.results || [];
-      console.log(`[resolveProductId] "${itemName}" → ${list.length} results`, list.slice(0, 3).map(p => ({ id: p.id || p.productId || p.Id, name: p.name || p.productName || p.Name, sku: p.sku || p.SKU })));
 
       if (!list.length) return this.defaultProductId;
 
-      const getId = (p) => p.id || p.productId || p.Id || p.ProductId;
-
-      if (list.length === 1) return getId(list[0]) || this.defaultProductId;
-
-      // Multiple variants — score each by how well it matches size and colour
+      const nameQ   = itemName.toLowerCase().trim();
       const sizeQ   = (size   || "").toLowerCase().trim();
       const colourQ = (colour || "").toLowerCase().trim();
+      const getId   = (p) => p.id || p.productId || p.Id || p.ProductId;
 
-      const scored = list.map(p => {
-        const label = ((p.name || p.productName || p.Name || "") + " " + (p.sku || p.SKU || "")).toLowerCase();
+      const matches = list.filter(p => (p.name || "").toLowerCase().includes(nameQ));
+      console.log(`[resolveProductId] "${itemName}" → ${matches.length} match(es)`);
+
+      if (!matches.length) return this.defaultProductId;
+      if (matches.length === 1) return getId(matches[0]) || this.defaultProductId;
+
+      const scored = matches.map(p => {
+        const label = ((p.name || "") + " " + (p.code || "")).toLowerCase();
         let score = 0;
         if (sizeQ   && label.includes(sizeQ))   score++;
         if (colourQ && label.includes(colourQ)) score++;
         return { id: getId(p), score };
       });
-
       scored.sort((a, b) => b.score - a.score);
       return scored[0].id || this.defaultProductId;
     } catch (err) {
