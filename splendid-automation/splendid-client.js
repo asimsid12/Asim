@@ -120,9 +120,6 @@ class SplendidClient {
 
   // ── Products ─────────────────────────────────────────────────────────────
 
-  /**
-   * Look up a product by name. Returns first match or null.
-   */
   async findProductByName(name) {
     try {
       const res = await this.get(
@@ -132,6 +129,40 @@ class SplendidClient {
       return list.length > 0 ? list[0] : null;
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Resolve a Splendid numeric productId from a human-readable item name + size + colour.
+   * Searches Splendid for all variants of the product, then picks the best match.
+   * Falls back to defaultProductId if nothing found.
+   */
+  async resolveProductId(itemName, size, colour) {
+    if (!itemName) return this.defaultProductId;
+    try {
+      const res = await this.get(
+        `/${this.tenant}/${this.branchId}/Products/BySKUOrName?name=${encodeURIComponent(itemName)}`
+      );
+      const list = Array.isArray(res) ? res : res.results || [];
+      if (!list.length) return this.defaultProductId;
+      if (list.length === 1) return list[0].id || this.defaultProductId;
+
+      // Multiple variants — score each by how well it matches size and colour
+      const sizeQ   = (size   || "").toLowerCase().trim();
+      const colourQ = (colour || "").toLowerCase().trim();
+
+      const scored = list.map(p => {
+        const label = ((p.name || "") + " " + (p.sku || "")).toLowerCase();
+        let score = 0;
+        if (sizeQ   && label.includes(sizeQ))   score++;
+        if (colourQ && label.includes(colourQ)) score++;
+        return { id: p.id, score };
+      });
+
+      scored.sort((a, b) => b.score - a.score);
+      return scored[0].id || this.defaultProductId;
+    } catch {
+      return this.defaultProductId;
     }
   }
 
@@ -150,7 +181,7 @@ class SplendidClient {
     const unitPrice = parseFloat(order.unitPrice)   || 0;
     const gross     = qty * unitPrice;
 
-    const productId = this.defaultProductId;
+    const productId = await this.resolveProductId(order.itemName, order.size, order.colour);
 
     const today   = new Date().toISOString().split("T")[0];
     const dueDate = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];

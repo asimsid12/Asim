@@ -80,7 +80,15 @@ Rules:
 - Courier mapping: tcs→TCS, leo/leopards→Leopards, blue/blueex→BlueEx, postex→PostEx, mp/m&p→M&P.
 - For expenses: category = one of Fabric, Tailoring, Accessories, Embroidery, Other.
 - Tailoring vendor: use the actual name (Sunny, Ibrahim, etc.) so the right account is used.
-- Return ONLY the JSON object.`;
+- Return ONLY the JSON object.
+
+IMPORTANT — itemName must be the exact Baro Studio product name from this catalog:
+Rano Skirt | Balloon Jumpi | Balloon Pant | Dev Pant | Work Skirt | Rano Set | Jiro Set | Rano Shirt | Trench Trucker | Schez Top | Machli Top | Masti Shirt | Sculpted Jacket
+
+Match the owner's words to the closest product name above (e.g. "masti kurta" → "Masti Shirt", "balloon jumpsuit" → "Balloon Jumpi", "rano" → ask context: skirt/shirt/set).
+For size, use the exact size mentioned (XS, XS-S, S, S-M, M, L, L-XXL, XL, XXL, or waist number for pants).
+For colour, use the colour name as spoken (e.g. "navy", "pink mud", "tarboozi", "cow print").
+If the item is not in the catalog, still fill itemName with what was said.`;
 
 async function parseCommand(text) {
   const year = new Date().getFullYear();
