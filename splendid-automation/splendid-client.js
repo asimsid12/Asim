@@ -141,16 +141,8 @@ class SplendidClient {
     if (this._productCache && Date.now() - this._productCacheTime < 5 * 60 * 1000) {
       return this._productCache;
     }
-    const all = [];
-    let page = 1;
-    while (true) {
-      const res = await this.get(`/${this.tenant}/${this.branchId}/Products?page=${page}`);
-      const batch = Array.isArray(res) ? res : res.results || [];
-      all.push(...batch);
-      const totalPages = res.pages || 1;
-      if (page >= totalPages || batch.length === 0) break;
-      page++;
-    }
+    const res = await this.get(`/${this.tenant}/${this.branchId}/Products?size=500`);
+    const all = Array.isArray(res) ? res : res.results || [];
     this._productCache = all;
     this._productCacheTime = Date.now();
     console.log(`[products] cached ${all.length} products, sample:`, all.slice(0, 5).map(p => p.name));
