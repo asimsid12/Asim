@@ -137,15 +137,30 @@ class SplendidClient {
    * Searches Splendid for all variants of the product, then picks the best match.
    * Falls back to defaultProductId if nothing found.
    */
+  async _fetchAllProducts() {
+    if (this._productCache && Date.now() - this._productCacheTime < 5 * 60 * 1000) {
+      return this._productCache;
+    }
+    const all = [];
+    let page = 1;
+    while (true) {
+      const res = await this.get(`/${this.tenant}/${this.branchId}/Products?page=${page}`);
+      const batch = Array.isArray(res) ? res : res.results || [];
+      all.push(...batch);
+      const totalPages = res.pages || 1;
+      if (page >= totalPages || batch.length === 0) break;
+      page++;
+    }
+    this._productCache = all;
+    this._productCacheTime = Date.now();
+    console.log(`[products] cached ${all.length} products`);
+    return all;
+  }
+
   async resolveProductId(itemName, size, colour) {
     if (!itemName) return this.defaultProductId;
     try {
-      const res = await this.get(
-        `/${this.tenant}/${this.branchId}/Products?page=1&pageSize=200`
-      );
-      const list = Array.isArray(res) ? res : res.results || [];
-
-      if (!list.length) return this.defaultProductId;
+      const list = await this._fetchAllProducts();
 
       const nameQ   = itemName.toLowerCase().trim();
       const sizeQ   = (size   || "").toLowerCase().trim();
@@ -153,7 +168,7 @@ class SplendidClient {
       const getId   = (p) => p.id || p.productId || p.Id || p.ProductId;
 
       const matches = list.filter(p => (p.name || "").toLowerCase().includes(nameQ));
-      console.log(`[resolveProductId] "${itemName}" → ${matches.length} match(es)`);
+      console.log(`[resolveProductId] "${itemName}" → ${matches.length} match(es) from ${list.length} products`);
 
       if (!matches.length) return this.defaultProductId;
       if (matches.length === 1) return getId(matches[0]) || this.defaultProductId;
