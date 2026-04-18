@@ -55,4 +55,10 @@ async function test(label, url, method = "GET", body, extraHeaders = {}) {
   await test(`GET /${tenant}/warehouses`,          `${base}/${tenant}/warehouses`,                                   "GET",  null, appId);
   await test(`GET /${tenant}/${branch}/Customers`, `${base}/${tenant}/${branch}/Customers?page=1&pageSize=1`,        "GET",  null, appId);
   await test(`POST Customers/Search`,              `${base}/${tenant}/${branch}/Customers/Search`,                   "POST", { name: { name: "test", exactMatch: false } }, appId);
+
+  // Product endpoint tests
+  await test(`GET Products list (first 3)`,        `${base}/${tenant}/${branch}/Products?page=1&pageSize=3`,         "GET",  null, appId);
+  await test(`GET Products BySKUOrName name`,      `${base}/${tenant}/${branch}/Products/BySKUOrName?name=Masti`,   "GET",  null, appId);
+  await test(`GET Products BySKUOrName sku`,       `${base}/${tenant}/${branch}/Products/BySKUOrName?sku=P-000026`, "GET",  null, appId);
+  await test(`POST Products Search`,               `${base}/${tenant}/${branch}/Products/Search`,                   "POST", { name: { name: "Masti", exactMatch: false } }, appId);
 })();
