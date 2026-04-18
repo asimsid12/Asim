@@ -153,7 +153,7 @@ class SplendidClient {
     }
     this._productCache = all;
     this._productCacheTime = Date.now();
-    console.log(`[products] cached ${all.length} products`);
+    console.log(`[products] cached ${all.length} products, sample:`, all.slice(0, 5).map(p => p.name));
     return all;
   }
 
@@ -167,7 +167,10 @@ class SplendidClient {
       const colourQ = (colour || "").toLowerCase().trim();
       const getId   = (p) => p.id || p.productId || p.Id || p.ProductId;
 
-      const matches = list.filter(p => (p.name || "").toLowerCase().includes(nameQ));
+      const matches = list.filter(p => {
+        const pName = (p.name || "").toLowerCase();
+        return pName.includes(nameQ) || nameQ.includes(pName);
+      });
       console.log(`[resolveProductId] "${itemName}" → ${matches.length} match(es) from ${list.length} products`);
 
       if (!matches.length) return this.defaultProductId;
