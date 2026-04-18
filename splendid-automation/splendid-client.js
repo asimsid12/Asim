@@ -144,24 +144,30 @@ class SplendidClient {
         `/${this.tenant}/${this.branchId}/Products/BySKUOrName?name=${encodeURIComponent(itemName)}`
       );
       const list = Array.isArray(res) ? res : res.results || [];
+      console.log(`[resolveProductId] "${itemName}" → ${list.length} results`, list.slice(0, 3).map(p => ({ id: p.id || p.productId || p.Id, name: p.name || p.productName || p.Name, sku: p.sku || p.SKU })));
+
       if (!list.length) return this.defaultProductId;
-      if (list.length === 1) return list[0].id || this.defaultProductId;
+
+      const getId = (p) => p.id || p.productId || p.Id || p.ProductId;
+
+      if (list.length === 1) return getId(list[0]) || this.defaultProductId;
 
       // Multiple variants — score each by how well it matches size and colour
       const sizeQ   = (size   || "").toLowerCase().trim();
       const colourQ = (colour || "").toLowerCase().trim();
 
       const scored = list.map(p => {
-        const label = ((p.name || "") + " " + (p.sku || "")).toLowerCase();
+        const label = ((p.name || p.productName || p.Name || "") + " " + (p.sku || p.SKU || "")).toLowerCase();
         let score = 0;
         if (sizeQ   && label.includes(sizeQ))   score++;
         if (colourQ && label.includes(colourQ)) score++;
-        return { id: p.id, score };
+        return { id: getId(p), score };
       });
 
       scored.sort((a, b) => b.score - a.score);
       return scored[0].id || this.defaultProductId;
-    } catch {
+    } catch (err) {
+      console.log(`[resolveProductId] error for "${itemName}":`, err.message);
       return this.defaultProductId;
     }
   }
