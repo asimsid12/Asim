@@ -57,8 +57,8 @@ async function test(label, url, method = "GET", body, extraHeaders = {}) {
   await test(`POST Customers/Search`,              `${base}/${tenant}/${branch}/Customers/Search`,                   "POST", { name: { name: "test", exactMatch: false } }, appId);
 
   // Product endpoint tests
-  await test(`GET Products list (first 3)`,        `${base}/${tenant}/${branch}/Products?page=1&pageSize=3`,         "GET",  null, appId);
-  await test(`GET Products BySKUOrName name`,      `${base}/${tenant}/${branch}/Products/BySKUOrName?name=Masti`,   "GET",  null, appId);
-  await test(`GET Products BySKUOrName sku`,       `${base}/${tenant}/${branch}/Products/BySKUOrName?sku=P-000026`, "GET",  null, appId);
-  await test(`POST Products Search`,               `${base}/${tenant}/${branch}/Products/Search`,                   "POST", { name: { name: "Masti", exactMatch: false } }, appId);
+  await test(`GET Products BySKU MST-PNK-M`,       `${base}/${tenant}/${branch}/Products/BySKU?sku=MST-PNK-M`,     "GET",  null, appId);
+  await test(`POST ByBaseProductIds`,              `${base}/${tenant}/${branch}/Products/ByBaseProductIds`,         "POST", { baseProductIds: [3526448] }, appId);
+  await test(`GET Products filter=Masti`,          `${base}/${tenant}/${branch}/Products?filter=Masti&size=20`,     "GET",  null, appId);
+  await test(`GET Products BatchProducts`,         `${base}/${tenant}/${branch}/Products/BatchProducts?size=5`,     "GET",  null, appId);
 })();
