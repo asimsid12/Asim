@@ -166,17 +166,39 @@ class SplendidClient {
       console.log(`[resolveProductId] "${itemName}" → ${matches.length} match(es) from ${list.length} products`);
 
       if (!matches.length) return this.defaultProductId;
-      if (matches.length === 1) return getId(matches[0]) || this.defaultProductId;
 
+      // Score base matches by size/colour
       const scored = matches.map(p => {
         const label = ((p.name || "") + " " + (p.code || "")).toLowerCase();
         let score = 0;
         if (sizeQ   && label.includes(sizeQ))   score++;
         if (colourQ && label.includes(colourQ)) score++;
-        return { id: getId(p), score };
+        return { p, id: getId(p), score };
       });
       scored.sort((a, b) => b.score - a.score);
-      return scored[0].id || this.defaultProductId;
+      const baseId = scored[0].id || this.defaultProductId;
+
+      // Try to get a specific variant from the base product
+      try {
+        const details = await this.get(`/${this.tenant}/${this.branchId}/Products/${baseId}/details`);
+        const variants = details.variants || details.productVariants || details.Variants || details.packings || [];
+        console.log(`[resolveProductId] "${itemName}" base=${baseId}, variants=${variants.length}`, variants.slice(0, 3).map(v => ({ id: v.id || v.productId, name: v.name || v.packingName, sku: v.sku })));
+        if (variants.length > 0) {
+          const vScored = variants.map(v => {
+            const label = ((v.name || v.packingName || v.variantName || "") + " " + (v.sku || "")).toLowerCase();
+            let score = 0;
+            if (sizeQ   && label.includes(sizeQ))   score++;
+            if (colourQ && label.includes(colourQ)) score++;
+            return { id: v.id || v.productId || v.variantId, score };
+          });
+          vScored.sort((a, b) => b.score - a.score);
+          if (vScored[0].id) return vScored[0].id;
+        }
+      } catch (e) {
+        console.log(`[resolveProductId] details fetch failed:`, e.message);
+      }
+
+      return baseId;
     } catch (err) {
       console.log(`[resolveProductId] error for "${itemName}":`, err.message);
       return this.defaultProductId;
