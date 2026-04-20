@@ -57,8 +57,7 @@ async function test(label, url, method = "GET", body, extraHeaders = {}) {
   await test(`POST Customers/Search`,              `${base}/${tenant}/${branch}/Customers/Search`,                   "POST", { name: { name: "test", exactMatch: false } }, appId);
 
   // Product endpoint tests
+  await test(`GET BySKUOrName full variant name`,  `${base}/${tenant}/${branch}/Products/BySKUOrName?name=${encodeURIComponent("Masti Shirt | M | Pink")}`, "GET", null, appId);
+  await test(`GET BySKUOrName partial name`,       `${base}/${tenant}/${branch}/Products/BySKUOrName?name=${encodeURIComponent("Masti Shirt")}`, "GET", null, appId);
   await test(`GET Products BySKU MST-PNK-M`,       `${base}/${tenant}/${branch}/Products/BySKU?sku=MST-PNK-M`,     "GET",  null, appId);
-  await test(`POST ByBaseProductIds`,              `${base}/${tenant}/${branch}/Products/ByBaseProductIds`,         "POST", { baseProductIds: [3526448] }, appId);
-  await test(`GET Products filter=Masti`,          `${base}/${tenant}/${branch}/Products?filter=Masti&size=20`,     "GET",  null, appId);
-  await test(`GET Products BatchProducts`,         `${base}/${tenant}/${branch}/Products/BatchProducts?size=5`,     "GET",  null, appId);
 })();
