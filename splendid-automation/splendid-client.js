@@ -141,11 +141,11 @@ class SplendidClient {
     if (this._productCache && Date.now() - this._productCacheTime < 5 * 60 * 1000) {
       return this._productCache;
     }
-    const res = await this.get(`/${this.tenant}/${this.branchId}/Products?size=500`);
-    const all = Array.isArray(res) ? res : res.results || [];
+    const res = await this.get(`/${this.tenant}/${this.branchId}/Products/ForSaleWithPacking?size=500`);
+    const all = Array.isArray(res) ? res : res.results || res || [];
     this._productCache = all;
     this._productCacheTime = Date.now();
-    console.log(`[products] cached ${all.length} products, sample:`, all.slice(0, 5).map(p => p.name));
+    console.log(`[products] cached ${all.length} packings, first item:`, JSON.stringify(all[0] || {}));
     return all;
   }
 
@@ -167,37 +167,17 @@ class SplendidClient {
 
       if (!matches.length) return this.defaultProductId;
 
-      // Score base matches by size/colour
+      // Score variants by size/colour — names are like "Masti Shirt | M | Pink"
       const scored = matches.map(p => {
-        const label = ((p.name || "") + " " + (p.code || "")).toLowerCase();
+        const label = ((p.name || "") + " " + (p.code || p.sku || "")).toLowerCase();
         let score = 0;
         if (sizeQ   && label.includes(sizeQ))   score++;
         if (colourQ && label.includes(colourQ)) score++;
-        return { p, id: getId(p), score };
+        return { id: getId(p), score };
       });
       scored.sort((a, b) => b.score - a.score);
-      const baseId = scored[0].id || this.defaultProductId;
-
-      // Try to get specific variants via ByBaseProductIds
-      try {
-        const variants = await this.post(`/${this.tenant}/${this.branchId}/Products/ByBaseProductIds`, [baseId]);
-        console.log(`[resolveProductId] variants for ${baseId}:`, JSON.stringify((variants || []).slice(0, 3)));
-        if (Array.isArray(variants) && variants.length > 0) {
-          const vScored = variants.map(v => {
-            const label = ((v.name || v.packingName || v.variantName || "") + " " + (v.sku || "")).toLowerCase();
-            let score = 0;
-            if (sizeQ   && label.includes(sizeQ))   score++;
-            if (colourQ && label.includes(colourQ)) score++;
-            return { id: v.id || v.productId || v.variantId, score };
-          });
-          vScored.sort((a, b) => b.score - a.score);
-          if (vScored[0].id) return vScored[0].id;
-        }
-      } catch (e) {
-        console.log(`[resolveProductId] ByBaseProductIds failed:`, e.message);
-      }
-
-      return baseId;
+      console.log(`[resolveProductId] best match id=${scored[0].id} score=${scored[0].score}`);
+      return scored[0].id || this.defaultProductId;
     } catch (err) {
       console.log(`[resolveProductId] error for "${itemName}":`, err.message);
       return this.defaultProductId;
