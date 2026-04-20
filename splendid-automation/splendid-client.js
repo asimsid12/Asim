@@ -178,12 +178,11 @@ class SplendidClient {
       scored.sort((a, b) => b.score - a.score);
       const baseId = scored[0].id || this.defaultProductId;
 
-      // Try to get a specific variant from the base product
+      // Try to get specific variants via ByBaseProductIds
       try {
-        const details = await this.get(`/${this.tenant}/${this.branchId}/Products/${baseId}/details`);
-        const variants = details.variants || details.productVariants || details.Variants || details.packings || [];
-        console.log(`[resolveProductId] "${itemName}" base=${baseId}, variants=${variants.length}`, variants.slice(0, 3).map(v => ({ id: v.id || v.productId, name: v.name || v.packingName, sku: v.sku })));
-        if (variants.length > 0) {
+        const variants = await this.post(`/${this.tenant}/${this.branchId}/Products/ByBaseProductIds`, [baseId]);
+        console.log(`[resolveProductId] variants for ${baseId}:`, JSON.stringify((variants || []).slice(0, 3)));
+        if (Array.isArray(variants) && variants.length > 0) {
           const vScored = variants.map(v => {
             const label = ((v.name || v.packingName || v.variantName || "") + " " + (v.sku || "")).toLowerCase();
             let score = 0;
@@ -195,7 +194,7 @@ class SplendidClient {
           if (vScored[0].id) return vScored[0].id;
         }
       } catch (e) {
-        console.log(`[resolveProductId] details fetch failed:`, e.message);
+        console.log(`[resolveProductId] ByBaseProductIds failed:`, e.message);
       }
 
       return baseId;
