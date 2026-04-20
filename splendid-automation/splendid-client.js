@@ -141,12 +141,20 @@ class SplendidClient {
     if (this._productCache && Date.now() - this._productCacheTime < 5 * 60 * 1000) {
       return this._productCache;
     }
-    const res = await this.get(`/${this.tenant}/${this.branchId}/Products/ForSaleWithPacking?size=500`);
-    const all = Array.isArray(res) ? res : res.results || res || [];
+    const res = await this.get(`/${this.tenant}/${this.branchId}/Products?size=500`);
+    const all = Array.isArray(res) ? res : res.results || [];
     this._productCache = all;
     this._productCacheTime = Date.now();
-    console.log(`[products] cached ${all.length} packings, first item:`, JSON.stringify(all[0] || {}));
+    console.log(`[products] cached ${all.length} products`);
     return all;
+  }
+
+  async _fetchVariants(itemName) {
+    const res = await this.get(`/${this.tenant}/${this.branchId}/Products?filter=${encodeURIComponent(itemName)}&size=100`);
+    const all = Array.isArray(res) ? res : res.results || [];
+    const variants = all.filter(p => p.baseProductId != null);
+    console.log(`[variants] "${itemName}" → ${variants.length} variants:`, variants.map(v => ({ id: v.id, name: v.name })));
+    return variants;
   }
 
   async resolveProductId(itemName, size, colour) {
@@ -167,17 +175,25 @@ class SplendidClient {
 
       if (!matches.length) return this.defaultProductId;
 
-      // Score variants by size/colour — names are like "Masti Shirt | M | Pink"
-      const scored = matches.map(p => {
-        const label = ((p.name || "") + " " + (p.code || p.sku || "")).toLowerCase();
-        let score = 0;
-        if (sizeQ   && label.includes(sizeQ))   score++;
-        if (colourQ && label.includes(colourQ)) score++;
-        return { id: getId(p), score };
-      });
-      scored.sort((a, b) => b.score - a.score);
-      console.log(`[resolveProductId] best match id=${scored[0].id} score=${scored[0].score}`);
-      return scored[0].id || this.defaultProductId;
+      // Try to find specific variants for the matched base product
+      const variants = await this._fetchVariants(itemName);
+      if (variants.length > 0) {
+        const vScored = variants.map(v => {
+          const label = ((v.name || "") + " " + (v.sku || "")).toLowerCase();
+          let score = 0;
+          if (sizeQ   && label.includes(sizeQ))   score++;
+          if (colourQ && label.includes(colourQ)) score++;
+          return { id: getId(v), score };
+        });
+        vScored.sort((a, b) => b.score - a.score);
+        console.log(`[resolveProductId] best variant id=${vScored[0].id} score=${vScored[0].score}`);
+        if (vScored[0].id) return vScored[0].id;
+      }
+
+      // Fall back to base product
+      const baseId = getId(matches[0]);
+      console.log(`[resolveProductId] no variants found, using base id=${baseId}`);
+      return baseId || this.defaultProductId;
     } catch (err) {
       console.log(`[resolveProductId] error for "${itemName}":`, err.message);
       return this.defaultProductId;
