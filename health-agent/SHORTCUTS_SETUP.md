@@ -1,67 +1,51 @@
-# Apple Shortcuts Setup — Apple Watch Data
+# Apple Shortcuts Setup — Apple Watch Active Calories
 
-This replaces Health Auto Export. The iOS Shortcut reads HealthKit data and
-POSTs it to your server in the same JSON format the webhook expects.
-
-## Create the Shortcut
+## Create the Shortcut (2 minutes)
 
 1. Open the **Shortcuts** app on your iPhone
-2. Tap **+** to create a new shortcut, name it "Log Health Data"
+2. Tap **+** → name it "Log Calories"
+3. Add these 3 actions:
 
-### Actions to add (in order):
+**Action 1 — Get active calories:**
+- Search for and add: `Find Health Samples Where`
+- Tap "Health Category" → select **Active Energy**
+- Tap "in the last" → change to **today**
 
-**Action 1 — Get today's active energy:**
-- Add action: `Find Health Samples Where`
-- Type: `Active Energy`
-- Time: `is today`
+**Action 2 — Sum them up:**
+- Search for and add: `Calculate Statistics on Health Samples`
+- Statistic: **Sum**
 
-**Action 2 — Get total:**
-- Add action: `Calculate Statistics on [Health Samples]`
-- Statistic: `Sum`
-- This gives you a single number (total active kcal for today)
+**Action 3 — POST to your server:**
+- Search for and add: `Get Contents of URL`
+- URL: `https://YOUR-NGROK-OR-SERVER-URL/webhook/apple-watch`
+- Tap "Show More"
+- Method: **POST**
+- Request Body: **JSON**
+- Tap "Add new field" → Key: `data`, Value: tap the variable icon and paste this:
 
-**Action 3 — Get today's workouts:**
-- Add action: `Find Health Samples Where`
-- Type: `Workouts`
-- Time: `is today`
-
-**Action 4 — POST to your server:**
-- Add action: `Get Contents of URL`
-- URL: `https://YOUR-SERVER-URL/webhook/apple-watch`
-- Method: `POST`
-- Request Body: `JSON`
-- Add key: `data`
-- Value (JSON):
-```json
-{
-  "metrics": [
-    {
-      "name": "active_energy",
-      "data": [{ "qty": [result from Action 2], "date": "[current date]" }]
-    }
-  ]
-}
+```
+{"metrics":[{"name":"active_energy","data":[{"qty": CALCULATED_RESULT}]}]}
 ```
 
-> **Note:** For workout type/duration detail, the free Shortcuts app is limited.
-> The server will still log active calories correctly. Workout type is optional.
+Replace `CALCULATED_RESULT` with the magic variable output from Action 2 (tap the variable icon and select "Calculation Result").
+
+---
 
 ## Automate It
 
-1. Go to the **Automation** tab in Shortcuts
-2. Tap **+** → **Time of Day**
-3. Set time: **9:00 PM** (runs after your day is mostly done)
-4. Action: **Run Shortcut** → select "Log Health Data"
-5. Turn off "Ask Before Running"
+1. Go to **Automation** tab → tap **+**
+2. Select **Time of Day** → set to **9:00 PM**
+3. Action: **Run Shortcut** → "Log Calories"
+4. Toggle off **Ask Before Running**
 
-You can also add a second automation triggered **after a workout** for real-time logging.
+That's it. Every evening at 9pm your active calories automatically get sent to the server, which adjusts your calorie target for the day.
+
+---
 
 ## Test It
 
-Run the shortcut manually once. You should see your server log:
-```
+Run the shortcut manually once (tap the play button). Check your server terminal — you should see:
+
+```json
 {"status": "ok", "logged": [{"type": "active_energy", "calories": 350}]}
 ```
-
-If your server isn't running yet, you'll get a connection error — that's expected.
-Start the server first (`uvicorn main:app --port 8000`) and use ngrok to expose it.
