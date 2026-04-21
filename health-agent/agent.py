@@ -77,6 +77,16 @@ TOOLS = [
         },
     },
     {
+        "name": "calculate_calorie_target",
+        "description": "Get today's calorie budget status: target, consumed so far, and remaining.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "date_str": {"type": "string", "description": "Date as YYYY-MM-DD or 'today'"},
+            },
+        },
+    },
+    {
         "name": "get_weight_trend",
         "description": "Get weight trend over a number of days.",
         "input_schema": {
@@ -84,6 +94,52 @@ TOOLS = [
             "properties": {
                 "days": {"type": "integer", "description": "Number of days to analyze (default 7)"},
             },
+        },
+    },
+    {
+        "name": "get_goal_progress",
+        "description": "Get overall progress toward the 78kg goal: kg to go, estimated weeks remaining.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "save_chat_message",
+        "description": "Save a message to chat history with an optional context_type label.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "direction": {"type": "string", "enum": ["inbound", "outbound"]},
+                "content": {"type": "string"},
+                "context_type": {
+                    "type": "string",
+                    "description": "e.g. morning_weight, breakfast_check, lunch_check, snack_check, dinner_check, workout_check",
+                },
+            },
+            "required": ["direction", "content"],
+        },
+    },
+    {
+        "name": "get_recent_chat",
+        "description": "Get recent chat history to understand conversation context.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "n": {"type": "integer", "description": "Number of recent messages (default 10)"},
+            },
+        },
+    },
+    {
+        "name": "schedule_followup_reminder",
+        "description": "Schedule a one-time follow-up reminder for a meal check-in N minutes from now.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "meal_type": {
+                    "type": "string",
+                    "enum": ["breakfast", "lunch", "dinner", "snack"],
+                },
+                "minutes": {"type": "integer", "description": "Minutes from now (default 60)"},
+            },
+            "required": ["meal_type"],
         },
     },
     {
@@ -105,29 +161,87 @@ TOOL_MAP = {
     "log_weight": tool_fns.log_weight,
     "log_activity": tool_fns.log_activity,
     "calculate_daily_summary": tool_fns.calculate_daily_summary,
+    "calculate_calorie_target": tool_fns.calculate_calorie_target,
     "get_weight_trend": tool_fns.get_weight_trend,
+    "get_goal_progress": tool_fns.get_goal_progress,
+    "save_chat_message": tool_fns.save_chat_message,
+    "get_recent_chat": tool_fns.get_recent_chat,
+    "schedule_followup_reminder": tool_fns.schedule_followup_reminder,
     "send_whatsapp": whatsapp.send_message,
 }
 
 SYSTEM_PROMPT = """You are a proactive personal health tracking agent for Asim.
 
-User profile: Age 36, height 183cm, ~82kg, male.
-Resting TDEE (no activity): 1,850 kcal/day. On days with no Apple Watch data, use this value.
+## Profile
+Age: 36, Height: 183cm, Current weight: ~82kg, Male
+Goal: Reach 78kg with visible abs (six-pack) within 10-12 weeks
+Strategy: 440 kcal/day deficit from TDEE, 160-180g protein/day
 
-Responsibilities:
-- Food photo received: analyze it, estimate calories, log the meal, confirm to user.
-- Weight photo received: read the number off the scale, log it, confirm to user.
-- Apple Watch data received: log the activity calories.
-- Scheduled morning check (8am): if no weight logged today, send a reminder.
-- Scheduled midday check (1pm): if no lunch logged yet, check in with the user.
-- Scheduled evening check (8pm): calculate and send the daily summary.
-- Scheduled weekly check (Sunday 7pm): send a weekly summary with weight trend.
+## Calorie math
+- TDEE = Mifflin-St Jeor BMR × 1.375 (sedentary multiplier) + today's active calories from Apple Watch
+- Daily calorie target = TDEE − 440 + weekly adjustment stored in goals table
+- At 82kg with no activity: BMR ≈ 1,789 kcal, TDEE ≈ 2,450 kcal, target ≈ 2,010 kcal
+- Target rises if Apple Watch records active calories — exercising earns back calories
 
-Rules:
-- Be brief and direct. No fluff or filler phrases.
-- Always confirm what you logged with the exact values.
+## After every food or weight log
+Always call calculate_calorie_target then reply with:
+1. What was logged (name + kcal)
+2. Total consumed today vs daily target
+3. Remaining kcal for the day
+4. One sentence on what the next meal should aim for (e.g. "Keep dinner under 600 kcal to stay on target")
+
+## Handling ambiguous user replies (1/2/3, "later", "yes", "no")
+Always call get_recent_chat(6) first. Find the context_type of the last outbound message to understand what you asked.
+Context types: morning_weight | breakfast_check | lunch_check | snack_check | dinner_check | workout_check
+
+For meal checks (breakfast_check, lunch_check, dinner_check, followup_*):
+- Reply "1" or "won't eat" or "skip" → log 0-calorie entry: description="skipped [meal]", meal_type=[meal], then show updated budget
+- Reply "2" or "later" or "will eat later" → call schedule_followup_reminder(meal_type, 60), reply "Got it — I'll check back in an hour"
+- Reply "3" or "sending" or sends a photo → analyze and log the meal, show calorie budget
+
+## Scheduled trigger instructions
+When trigger starts with "schedule_" or "followup_", the agent MUST call send_whatsapp to deliver the message.
+
+**schedule_morning_weight** (8:00am):
+Send: "Good morning! Send me a photo of your weight."
+Save outbound with context_type="morning_weight"
+
+**schedule_breakfast_check** (10:00am):
+Check if breakfast already logged today — if yes, do nothing.
+Otherwise send:
+"Did you eat breakfast?
+1) I won't eat today
+2) Will eat later
+3) Sending photo now"
+Save outbound with context_type="breakfast_check"
+
+**schedule_lunch_check** (1:30pm):
+Same 3-option pattern. Save with context_type="lunch_check"
+
+**schedule_snack_check** (5:00pm):
+Send: "Any coffee or snacks today? Send photos or describe them and I'll log them."
+Save with context_type="snack_check"
+
+**schedule_dinner_check** (8:30pm):
+Same 3-option pattern. Save with context_type="dinner_check"
+
+**schedule_workout_check** (10:00pm):
+Check today's activity_logs. If any exist (any source), do nothing.
+Otherwise send: "Did you work out today? If yes, tell me what you did and roughly how long."
+Save with context_type="workout_check"
+
+**schedule_weekly** (Sunday 7pm):
+Call get_weight_trend(7) and get_goal_progress().
+Send a weekly summary: weight change this week, goal ETA in weeks, whether calorie target was adjusted.
+
+**followup_breakfast / followup_lunch / followup_dinner** (one-time, ~1hr after "will eat later"):
+Re-send the 3-option check-in for the relevant meal. Save with the appropriate context_type.
+
+## Rules
+- Be brief and direct. No filler.
+- Always confirm logged values with exact numbers.
 - If calorie estimate is uncertain, give a range and state your assumption.
-- Do not send a proactive message if the relevant data has already been logged.
+- Do not send a proactive message if the relevant data is already logged.
 - Current time: {current_time}"""
 
 
@@ -141,7 +255,12 @@ def _execute_tool(name: str, inputs: dict) -> str:
         return f"Tool error: {e}"
 
 
-def run_agent(trigger: str, message: str = None, image_url: str = None) -> str:
+def run_agent(
+    trigger: str,
+    message: str = None,
+    image_url: str = None,
+    chat_history: list = None,
+) -> str:
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
 
     content = []
@@ -160,10 +279,7 @@ def run_agent(trigger: str, message: str = None, image_url: str = None) -> str:
         )
         if not message:
             content.append(
-                {
-                    "type": "text",
-                    "text": "Analyze this image and take the appropriate action (log meal or weight).",
-                }
+                {"type": "text", "text": "Analyze this image and take the appropriate action (log meal or weight)."}
             )
 
     if message:
@@ -173,11 +289,18 @@ def run_agent(trigger: str, message: str = None, image_url: str = None) -> str:
         content.append(
             {
                 "type": "text",
-                "text": f"Scheduled check-in at {datetime.now().strftime('%A %I:%M %p')}. Review today's logs and take any needed proactive action.",
+                "text": f"Trigger: {trigger}. Current time: {datetime.now().strftime('%A %I:%M %p')}. Follow the scheduled trigger instructions for this trigger.",
             }
         )
 
-    messages = [{"role": "user", "content": content}]
+    messages = []
+
+    if chat_history:
+        for entry in chat_history:
+            role = "user" if entry["direction"] == "inbound" else "assistant"
+            messages.append({"role": role, "content": entry["content"]})
+
+    messages.append({"role": "user", "content": content})
 
     while True:
         response = client.messages.create(

@@ -1,7 +1,21 @@
 from datetime import datetime, date, timedelta
+
+import database
 from database import get_conn
 
-RESTING_TDEE = 1850
+HEIGHT_CM = 183.0
+AGE = 36
+DEFICIT_KCAL = 440
+MAX_ADJ = 300
+MIN_ADJ = -400
+
+
+def _bmr(weight_kg: float) -> float:
+    return (10 * weight_kg) + (6.25 * HEIGHT_CM) - (5 * AGE) + 5
+
+
+def _tdee(weight_kg: float, active_kcal: int = 0) -> int:
+    return round(_bmr(weight_kg) * 1.375) + active_kcal
 
 
 def read_health_logs(date_str: str = "today", days_back: int = 1) -> dict:
@@ -66,27 +80,44 @@ def log_activity(
 
 def calculate_daily_summary(date_str: str = "today") -> dict:
     logs = read_health_logs(date_str, 1)
+    goal = database.get_or_create_goal()
 
+    latest_weight = logs["weight_logs"][-1]["weight_kg"] if logs["weight_logs"] else 82.0
+    active_kcal = sum(a["calories_burned"] for a in logs["activity_logs"])
+
+    tdee = _tdee(latest_weight, active_kcal)
+    calorie_target = tdee - DEFICIT_KCAL + goal["daily_calorie_adjustment"]
     total_intake = sum(m["calories"] for m in logs["meals"])
-    active_calories = sum(a["calories_burned"] for a in logs["activity_logs"])
 
-    if not logs["activity_logs"]:
-        total_burned = RESTING_TDEE
-        activity_note = "No Apple Watch data — using resting TDEE (1,850 kcal)"
-    else:
-        total_burned = RESTING_TDEE + active_calories
-        activity_note = f"{len(logs['activity_logs'])} session(s), {active_calories} active kcal"
-
-    latest_weight = logs["weight_logs"][-1]["weight_kg"] if logs["weight_logs"] else None
+    activity_note = (
+        f"{len(logs['activity_logs'])} session(s), {active_kcal} active kcal"
+        if logs["activity_logs"]
+        else "No Apple Watch data — sedentary TDEE used"
+    )
 
     return {
         "date": date_str,
         "total_intake_kcal": total_intake,
-        "total_burned_kcal": total_burned,
-        "net_kcal": total_intake - total_burned,
+        "calorie_target_kcal": calorie_target,
+        "remaining_kcal": calorie_target - total_intake,
+        "tdee_kcal": tdee,
+        "net_kcal": total_intake - tdee,
         "meals_logged": len(logs["meals"]),
+        "active_kcal_burned": active_kcal,
         "latest_weight_kg": latest_weight,
+        "protein_target_g": goal["protein_target_g"],
         "activity_note": activity_note,
+    }
+
+
+def calculate_calorie_target(date_str: str = "today") -> dict:
+    s = calculate_daily_summary(date_str)
+    return {
+        "calorie_target_kcal": s["calorie_target_kcal"],
+        "consumed_kcal": s["total_intake_kcal"],
+        "remaining_kcal": s["remaining_kcal"],
+        "tdee_kcal": s["tdee_kcal"],
+        "active_kcal_today": s["active_kcal_burned"],
     }
 
 
@@ -107,3 +138,88 @@ def get_weight_trend(days: int = 7) -> dict:
         "change_kg": round(last - first, 2),
         "readings": weights,
     }
+
+
+def get_goal_progress() -> dict:
+    goal = database.get_or_create_goal()
+    trend = get_weight_trend(days=7)
+    current_weight = trend.get("current_weight_kg") or 82.0
+    kg_to_go = round(current_weight - goal["target_weight_kg"], 2)
+    weeks_remaining = round(kg_to_go / 0.4, 1) if kg_to_go > 0 else 0
+
+    return {
+        "current_weight_kg": current_weight,
+        "target_weight_kg": goal["target_weight_kg"],
+        "kg_to_go": kg_to_go,
+        "estimated_weeks_remaining": weeks_remaining,
+        "daily_calorie_adjustment": goal["daily_calorie_adjustment"],
+        "protein_target_g": goal["protein_target_g"],
+    }
+
+
+def save_chat_message(direction: str, content: str, context_type: str = None) -> dict:
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO chat_history (timestamp, direction, content, context_type) VALUES (?, ?, ?, ?)",
+            (datetime.now().isoformat(), direction, content, context_type),
+        )
+    return {"status": "saved"}
+
+
+def get_recent_chat(n: int = 10) -> list:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT timestamp, direction, content, context_type FROM chat_history ORDER BY id DESC LIMIT ?",
+            (n,),
+        ).fetchall()
+    return [dict(r) for r in reversed(rows)]
+
+
+def schedule_followup_reminder(meal_type: str, minutes: int = 60) -> dict:
+    from datetime import datetime, timedelta
+    from scheduler import get_scheduler
+
+    run_time = datetime.now() + timedelta(minutes=minutes)
+    job_id = f"followup_{meal_type}_{run_time.strftime('%H%M')}"
+
+    def _fire():
+        from agent import run_agent
+        run_agent(trigger=f"followup_{meal_type}")
+
+    get_scheduler().add_job(
+        _fire,
+        "date",
+        run_date=run_time,
+        id=job_id,
+        replace_existing=True,
+    )
+    return {"status": "scheduled", "meal_type": meal_type, "run_at": run_time.isoformat()}
+
+
+def do_weekly_calorie_adjustment() -> dict:
+    trend = get_weight_trend(days=7)
+    if trend.get("trend") == "insufficient data":
+        return {"status": "skipped", "reason": "insufficient data"}
+
+    lost = -(trend["change_kg"])
+    goal = database.get_or_create_goal()
+    current_adj = goal["daily_calorie_adjustment"]
+
+    if lost > 0.6:
+        new_adj = current_adj + 100
+        note = f"Lost {lost:.2f}kg this week (too fast). Adding 100 kcal/day."
+    elif lost < 0.2:
+        new_adj = current_adj - 100
+        note = f"Lost {lost:.2f}kg this week (too slow). Reducing 100 kcal/day."
+    else:
+        new_adj = current_adj
+        note = f"Lost {lost:.2f}kg this week. On track."
+
+    new_adj = max(MIN_ADJ, min(MAX_ADJ, new_adj))
+
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE goals SET daily_calorie_adjustment = ?, updated_at = ? WHERE id = 1",
+            (new_adj, datetime.now().isoformat()),
+        )
+    return {"status": "adjusted", "new_adjustment_kcal": new_adj, "note": note}
