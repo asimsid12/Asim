@@ -46,15 +46,26 @@ def init_db():
                 age INTEGER NOT NULL DEFAULT 36,
                 protein_target_g INTEGER NOT NULL DEFAULT 170,
                 daily_calorie_adjustment INTEGER NOT NULL DEFAULT 0,
+                carry_over_kcal INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS daily_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL UNIQUE,
+                target_kcal INTEGER NOT NULL,
+                consumed_kcal INTEGER NOT NULL,
+                surplus_kcal INTEGER NOT NULL,
+                carry_kcal INTEGER NOT NULL,
+                weight_kg REAL
             );
         """)
         conn.execute(
             """INSERT OR IGNORE INTO goals
                (id, target_weight_kg, height_cm, age, protein_target_g,
-                daily_calorie_adjustment, created_at, updated_at)
-               VALUES (1, 78.0, 183.0, 36, 170, 0, ?, ?)""",
+                daily_calorie_adjustment, carry_over_kcal, created_at, updated_at)
+               VALUES (1, 78.0, 183.0, 36, 170, 0, 0, ?, ?)""",
             (datetime.now().isoformat(), datetime.now().isoformat()),
         )
 

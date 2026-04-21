@@ -8,6 +8,8 @@ AGE = 36
 DEFICIT_KCAL = 440
 MAX_ADJ = 300
 MIN_ADJ = -400
+MAX_CARRY = 300
+MIN_CARRY = -300
 
 
 def _bmr(weight_kg: float) -> float:
@@ -86,7 +88,7 @@ def calculate_daily_summary(date_str: str = "today") -> dict:
     active_kcal = sum(a["calories_burned"] for a in logs["activity_logs"])
 
     tdee = _tdee(latest_weight, active_kcal)
-    calorie_target = tdee - DEFICIT_KCAL + goal["daily_calorie_adjustment"]
+    calorie_target = tdee - DEFICIT_KCAL + goal["daily_calorie_adjustment"] + goal["carry_over_kcal"]
     total_intake = sum(m["calories"] for m in logs["meals"])
 
     activity_note = (
@@ -106,6 +108,7 @@ def calculate_daily_summary(date_str: str = "today") -> dict:
         "active_kcal_burned": active_kcal,
         "latest_weight_kg": latest_weight,
         "protein_target_g": goal["protein_target_g"],
+        "carry_over_kcal": goal["carry_over_kcal"],
         "activity_note": activity_note,
     }
 
@@ -118,6 +121,7 @@ def calculate_calorie_target(date_str: str = "today") -> dict:
         "remaining_kcal": s["remaining_kcal"],
         "tdee_kcal": s["tdee_kcal"],
         "active_kcal_today": s["active_kcal_burned"],
+        "carry_over_kcal": s["carry_over_kcal"],
     }
 
 
@@ -153,6 +157,7 @@ def get_goal_progress() -> dict:
         "kg_to_go": kg_to_go,
         "estimated_weeks_remaining": weeks_remaining,
         "daily_calorie_adjustment": goal["daily_calorie_adjustment"],
+        "carry_over_kcal": goal["carry_over_kcal"],
         "protein_target_g": goal["protein_target_g"],
     }
 
@@ -175,8 +180,66 @@ def get_recent_chat(n: int = 10) -> list:
     return [dict(r) for r in reversed(rows)]
 
 
+def close_day(date_str: str = "today") -> dict:
+    s = calculate_daily_summary(date_str)
+    target_date = date.today() if date_str == "today" else date.fromisoformat(date_str)
+
+    surplus = s["calorie_target_kcal"] - s["total_intake_kcal"]
+    carry = max(MIN_CARRY, min(MAX_CARRY, surplus))
+
+    weight = s["latest_weight_kg"] if s["latest_weight_kg"] != 82.0 else None
+
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT OR REPLACE INTO daily_logs
+               (date, target_kcal, consumed_kcal, surplus_kcal, carry_kcal, weight_kg)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (target_date.isoformat(), s["calorie_target_kcal"], s["total_intake_kcal"], surplus, carry, weight),
+        )
+        conn.execute(
+            "UPDATE goals SET carry_over_kcal = ?, updated_at = ? WHERE id = 1",
+            (carry, datetime.now().isoformat()),
+        )
+
+    return {
+        "date": target_date.isoformat(),
+        "target_kcal": s["calorie_target_kcal"],
+        "consumed_kcal": s["total_intake_kcal"],
+        "surplus_kcal": surplus,
+        "carry_to_tomorrow_kcal": carry,
+    }
+
+
+def get_weekly_calorie_log(weeks_back: int = 0) -> dict:
+    today = date.today()
+    monday = today - timedelta(days=today.weekday()) - timedelta(weeks=weeks_back)
+    sunday = monday + timedelta(days=6)
+
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM daily_logs WHERE date >= ? AND date <= ? ORDER BY date",
+            (monday.isoformat(), sunday.isoformat()),
+        ).fetchall()
+
+    days = [dict(r) for r in rows]
+    total_target = sum(d["target_kcal"] for d in days)
+    total_consumed = sum(d["consumed_kcal"] for d in days)
+    total_surplus = sum(d["surplus_kcal"] for d in days)
+
+    return {
+        "week_start": monday.isoformat(),
+        "week_end": sunday.isoformat(),
+        "days": days,
+        "totals": {
+            "target_kcal": total_target,
+            "consumed_kcal": total_consumed,
+            "net_surplus_kcal": total_surplus,
+            "days_logged": len(days),
+        },
+    }
+
+
 def schedule_followup_reminder(meal_type: str, minutes: int = 60) -> dict:
-    from datetime import datetime, timedelta
     from scheduler import get_scheduler
 
     run_time = datetime.now() + timedelta(minutes=minutes)

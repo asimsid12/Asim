@@ -102,6 +102,26 @@ TOOLS = [
         "input_schema": {"type": "object", "properties": {}},
     },
     {
+        "name": "get_weekly_calorie_log",
+        "description": "Get the day-by-day calorie log for a week (target vs consumed vs carry-over).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "weeks_back": {"type": "integer", "description": "0 = current week, 1 = last week"},
+            },
+        },
+    },
+    {
+        "name": "close_day",
+        "description": "Close out a day: compute surplus/deficit, write daily_logs, set tomorrow's carry-over. Call this if user asks about closing the day manually.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "date_str": {"type": "string", "description": "Date as YYYY-MM-DD or 'today'"},
+            },
+        },
+    },
+    {
         "name": "save_chat_message",
         "description": "Save a message to chat history with an optional context_type label.",
         "input_schema": {
@@ -164,6 +184,8 @@ TOOL_MAP = {
     "calculate_calorie_target": tool_fns.calculate_calorie_target,
     "get_weight_trend": tool_fns.get_weight_trend,
     "get_goal_progress": tool_fns.get_goal_progress,
+    "get_weekly_calorie_log": tool_fns.get_weekly_calorie_log,
+    "close_day": tool_fns.close_day,
     "save_chat_message": tool_fns.save_chat_message,
     "get_recent_chat": tool_fns.get_recent_chat,
     "schedule_followup_reminder": tool_fns.schedule_followup_reminder,
@@ -178,40 +200,50 @@ Goal: Reach 78kg with visible abs (six-pack) within 10-12 weeks
 Strategy: 440 kcal/day deficit from TDEE, 160-180g protein/day
 
 ## Calorie math
-- TDEE = Mifflin-St Jeor BMR × 1.375 (sedentary multiplier) + today's active calories from Apple Watch
-- Daily calorie target = TDEE − 440 + weekly adjustment stored in goals table
-- At 82kg with no activity: BMR ≈ 1,789 kcal, TDEE ≈ 2,450 kcal, target ≈ 2,010 kcal
-- Target rises if Apple Watch records active calories — exercising earns back calories
+- TDEE = Mifflin-St Jeor BMR × 1.375 + today's active calories from Apple Watch
+- Daily calorie target = TDEE − 440 + weekly_adjustment + carry_over from yesterday
+- At 82kg with no activity: target ≈ 2,010 kcal
+- Target rises if Apple Watch logs active calories — exercising earns back calories
+- Yesterday's surplus (capped ±300 kcal) carries into today's target automatically
 
 ## After every food or weight log
-Always call calculate_calorie_target then reply with:
+Always call calculate_calorie_target then reply with ALL of the following:
 1. What was logged (name + kcal)
 2. Total consumed today vs daily target
 3. Remaining kcal for the day
-4. One sentence on what the next meal should aim for (e.g. "Keep dinner under 600 kcal to stay on target")
+4. Next-meal split: divide remaining kcal across meals still to come. Examples:
+   - Only dinner left: "Keep dinner under X kcal"
+   - Snacks + dinner left: "~Y kcal for snacks, ~Z kcal for dinner"
+   - All meals done: "You're done for today — great job" or "You're Xkcal over, offset with a lighter tomorrow"
+
+## Carry-over
+- At 11:59pm the system automatically closes the day and carries your surplus/deficit (±300 kcal max) into tomorrow's target
+- If you under-ate by 400 kcal → tomorrow gets +300 kcal bonus
+- If you over-ate by 200 kcal → tomorrow loses 200 kcal
+- Always mention the carry-over in the evening summary so the user knows what tomorrow looks like
 
 ## Handling ambiguous user replies (1/2/3, "later", "yes", "no")
-Always call get_recent_chat(6) first. Find the context_type of the last outbound message to understand what you asked.
+Always call get_recent_chat(6) first. Find the context_type of the last outbound message.
 Context types: morning_weight | breakfast_check | lunch_check | snack_check | dinner_check | workout_check
 
 For meal checks (breakfast_check, lunch_check, dinner_check, followup_*):
-- Reply "1" or "won't eat" or "skip" → log 0-calorie entry: description="skipped [meal]", meal_type=[meal], then show updated budget
-- Reply "2" or "later" or "will eat later" → call schedule_followup_reminder(meal_type, 60), reply "Got it — I'll check back in an hour"
-- Reply "3" or "sending" or sends a photo → analyze and log the meal, show calorie budget
+- Reply "1" / "won't eat" / "skip" → log 0-calorie entry: description="skipped [meal]", meal_type=[meal], show updated budget
+- Reply "2" / "later" / "will eat later" → call schedule_followup_reminder(meal_type, 60), reply "Got it — I'll check back in an hour"
+- Reply "3" / "sending" / sends a photo → analyze and log the meal, show full calorie breakdown
 
 ## Scheduled trigger instructions
-When trigger starts with "schedule_" or "followup_", the agent MUST call send_whatsapp to deliver the message.
+When trigger starts with "schedule_" or "followup_", MUST call send_whatsapp to deliver the message.
 
 **schedule_morning_weight** (8:00am):
-Send: "Good morning! Send me a photo of your weight."
+Send: "Good morning! Send me a photo of your weight scale."
 Save outbound with context_type="morning_weight"
 
 **schedule_breakfast_check** (10:00am):
-Check if breakfast already logged today — if yes, do nothing.
+Check if any breakfast logged today — if yes, do nothing.
 Otherwise send:
-"Did you eat breakfast?
-1) I won't eat today
-2) Will eat later
+"Did you have breakfast?
+1) Skip — won't eat
+2) Will eat later (I'll remind you)
 3) Sending photo now"
 Save outbound with context_type="breakfast_check"
 
@@ -226,16 +258,16 @@ Save with context_type="snack_check"
 Same 3-option pattern. Save with context_type="dinner_check"
 
 **schedule_workout_check** (10:00pm):
-Check today's activity_logs. If any exist (any source), do nothing.
+Check today's activity_logs — if any exist, do nothing.
 Otherwise send: "Did you work out today? If yes, tell me what you did and roughly how long."
 Save with context_type="workout_check"
 
 **schedule_weekly** (Sunday 7pm):
-Call get_weight_trend(7) and get_goal_progress().
-Send a weekly summary: weight change this week, goal ETA in weeks, whether calorie target was adjusted.
+Call get_weight_trend(7), get_goal_progress(), get_weekly_calorie_log(0).
+Send a weekly summary covering: weight change, goal ETA, day-by-day calorie adherence, whether target was adjusted.
 
-**followup_breakfast / followup_lunch / followup_dinner** (one-time, ~1hr after "will eat later"):
-Re-send the 3-option check-in for the relevant meal. Save with the appropriate context_type.
+**followup_breakfast / followup_lunch / followup_dinner** (one-time):
+Re-send the 3-option check-in for the relevant meal. Save with appropriate context_type.
 
 ## Rules
 - Be brief and direct. No filler.
@@ -294,7 +326,6 @@ def run_agent(
         )
 
     messages = []
-
     if chat_history:
         for entry in chat_history:
             role = "user" if entry["direction"] == "inbound" else "assistant"

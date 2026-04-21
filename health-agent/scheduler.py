@@ -29,6 +29,9 @@ def start_scheduler() -> BackgroundScheduler:
     # 10:00pm — workout check (agent decides if needed)
     _scheduler.add_job(lambda: _run("schedule_workout_check"), "cron", hour=22, minute=0)
 
+    # 11:59pm — close out the day, compute surplus, set tomorrow's carry-over
+    _scheduler.add_job(lambda: _close_day(), "cron", hour=23, minute=59)
+
     # Sunday 7pm — weekly summary + calorie adjustment
     _scheduler.add_job(lambda: _weekly(), "cron", day_of_week="sun", hour=19, minute=0)
 
@@ -39,6 +42,11 @@ def start_scheduler() -> BackgroundScheduler:
 def _run(trigger: str):
     from agent import run_agent
     run_agent(trigger=trigger)
+
+
+def _close_day():
+    from tools import close_day
+    close_day("today")
 
 
 def _weekly():
