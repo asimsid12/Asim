@@ -1,8 +1,10 @@
 import base64
+import io
 from datetime import datetime
 
 import anthropic
 import httpx
+from PIL import Image
 
 import config
 import tools as tool_fns
@@ -298,21 +300,32 @@ def run_agent(
     content = []
 
     if image_url:
-        response = httpx.get(image_url, auth=(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN))
-        image_bytes = response.content
-        media_type = response.headers.get("content-type", "image/jpeg").split(";")[0].strip()
-        if media_type not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
-            media_type = "image/jpeg"
-        content.append(
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": media_type,
-                    "data": base64.standard_b64encode(image_bytes).decode(),
-                },
-            }
-        )
+        try:
+            img_response = httpx.get(
+                image_url,
+                auth=(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN),
+                follow_redirects=True,
+            )
+            img = Image.open(io.BytesIO(img_response.content))
+            if img.mode != "RGB":
+                img = img.convert("RGB")
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            image_bytes = buf.getvalue()
+            content.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/jpeg",
+                        "data": base64.standard_b64encode(image_bytes).decode(),
+                    },
+                }
+            )
+        except Exception:
+            content.append(
+                {"type": "text", "text": "I couldn't process the image. Please describe what you ate or your weight reading instead."}
+            )
         if not message:
             content.append(
                 {"type": "text", "text": "Analyze this image and take the appropriate action (log meal or weight)."}
