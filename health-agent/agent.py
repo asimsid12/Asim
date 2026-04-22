@@ -298,13 +298,17 @@ def run_agent(
     content = []
 
     if image_url:
-        image_bytes = httpx.get(image_url).content
+        response = httpx.get(image_url, auth=(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN))
+        image_bytes = response.content
+        media_type = response.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+        if media_type not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
+            media_type = "image/jpeg"
         content.append(
             {
                 "type": "image",
                 "source": {
                     "type": "base64",
-                    "media_type": "image/jpeg",
+                    "media_type": media_type,
                     "data": base64.standard_b64encode(image_bytes).decode(),
                 },
             }
