@@ -58,6 +58,13 @@ read health/data/latest.json and review my training week
 For food, just send a photo of the meal — Claude estimates the macros and appends
 it to `data/food-log.json`.
 
+## Using it from a phone
+
+The CLI above needs a computer to run on. If you want to ask from your phone
+instead, deploy `connector/` — a remote MCP server you add to Claude as a custom
+connector. Same API underneath, but Anthropic's cloud calls it, so nothing runs
+on your machine. See [connector/README.md](connector/README.md).
+
 ## Keeping it current
 
 Sync before you ask for a review, or add a cron entry:

@@ -10,6 +10,7 @@ Automation tools for Baro Studio, a Karachi-based limited-edition clothing brand
 | `splendid-automation/` | Node.js script that reads confirmed orders from the sheet and auto-creates invoices in Splendid Accounts |
 | `whatsapp-templates/` | Copy-paste WhatsApp messages for every stage of the order journey |
 | `health/` | Syncs Google Health data locally so Claude can review training and diet ([setup](health/README.md)) |
+| `health/connector/` | Remote MCP server that exposes the same data to Claude as a custom connector, usable from a phone ([setup](health/connector/README.md)) |
 
 ---
 
