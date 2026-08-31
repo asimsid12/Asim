@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+service-account-key.json
+*-key.json
+
+# Personal health data (workouts, sleep, meals, photos)
+health/data/
+
+# WhatsApp session state
+whatsapp-bot/auth/
+whatsapp-bot/.wwebjs_auth/

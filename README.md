@@ -9,6 +9,7 @@ Automation tools for Baro Studio, a Karachi-based limited-edition clothing brand
 | `order-sheet/` | Google Apps Script that sets up a fully structured order tracking sheet in Google Sheets |
 | `splendid-automation/` | Node.js script that reads confirmed orders from the sheet and auto-creates invoices in Splendid Accounts |
 | `whatsapp-templates/` | Copy-paste WhatsApp messages for every stage of the order journey |
+| `health/` | Syncs Google Health data locally so Claude can review training and diet ([setup](health/README.md)) |
 
 ---
 

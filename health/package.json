@@ -1,0 +1,14 @@
+{
+  "name": "baro-health",
+  "version": "1.0.0",
+  "description": "Syncs Google Health data locally so Claude can review training and diet",
+  "main": "cli.js",
+  "scripts": {
+    "auth": "node cli.js auth",
+    "doctor": "node cli.js doctor",
+    "sync": "node cli.js sync"
+  },
+  "dependencies": {
+    "dotenv": "^16.0.0"
+  }
+}
